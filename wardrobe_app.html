@@ -1,0 +1,3902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Wardrobe">
+<title>Wardrobe App</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+/* ═══════════════════════════════════════════════════
+   CSS VARIABLES — Naturalist Field Journal palette
+   ═══════════════════════════════════════════════════ */
+:root {
+  --parchment:      #F5EFE0;
+  --parchment-dark: #EDE6D5;
+  --parchment-mid:  #E4DAC5;
+  --ink:            #2C2C1E;
+  --ink-mid:        #4A3F2F;
+  --ink-light:      #6B5740;
+  --border:         #C8B89A;
+  --border-light:   #DDD0B8;
+  --sage:           #7A8C6A;
+  --sage-dark:      #4A5E3A;
+  --sage-light:     #B8C8A8;
+  --sage-bg:        #EEF3E8;
+  --terracotta:     #A0614A;
+  --terracotta-light: #F0C8C0;
+  --terracotta-bg:  #FAF0ED;
+  --navy:           #3A4A5C;
+  --navy-light:     #C8D4E0;
+  --amber:          #B08030;
+  --amber-light:    #F5DCA0;
+  --amber-bg:       #FDF6E3;
+  --white:          #FDFAF5;
+  --font-display:   'Playfair Display', 'Times New Roman', Georgia, serif;
+  --font-body:      'Lora', Georgia, 'Times New Roman', serif;
+  --radius:         6px;
+  --radius-lg:      10px;
+  --shadow:         0 1px 3px rgba(44,44,30,0.08);
+  --shadow-lg:      0 4px 16px rgba(44,44,30,0.12);
+  --transition:     0.18s ease;
+}
+
+/* ═══════════════════════════════════════════════════
+   RESET & BASE
+   ═══════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-size: 16px; -webkit-text-size-adjust: 100%; }
+body {
+  font-family: var(--font-body);
+  background: var(--parchment);
+  color: var(--ink);
+  min-height: 100vh;
+  line-height: 1.6;
+  /* Subtle paper texture via CSS noise */
+  background-image:
+    radial-gradient(ellipse at 20% 50%, rgba(122,140,106,0.04) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 20%, rgba(160,97,74,0.03) 0%, transparent 50%);
+}
+
+/* ═══════════════════════════════════════════════════
+   LAYOUT — 3 regions: nav | main | panel
+   ═══════════════════════════════════════════════════ */
+.app-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+/* ═══════════════════════════════════════════════════
+   HEADER
+   ═══════════════════════════════════════════════════ */
+.app-header {
+  padding: 20px 0 12px;
+  border-bottom: 1.5px solid var(--border);
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  justify-content: space-between;
+}
+.app-title {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: -0.02em;
+}
+.app-title span {
+  font-style: italic;
+  color: var(--ink-light);
+  font-weight: 400;
+  font-size: 1rem;
+  margin-left: 10px;
+  letter-spacing: 0;
+}
+.header-meta {
+  font-size: 0.75rem;
+  color: var(--ink-light);
+  font-family: var(--font-body);
+  display: flex;
+  gap: 16px;
+}
+.header-meta strong { color: var(--ink-mid); }
+
+/* ═══════════════════════════════════════════════════
+   NAV TABS
+   ═══════════════════════════════════════════════════ */
+.app-nav {
+  display: flex;
+  gap: 0;
+  border-bottom: 1px solid var(--border);
+  margin-top: 4px;
+}
+.nav-tab {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--ink-light);
+  padding: 10px 20px;
+  cursor: pointer;
+  border: none;
+  background: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color var(--transition), border-color var(--transition);
+  letter-spacing: 0.02em;
+}
+.nav-tab:hover { color: var(--ink-mid); }
+.nav-tab.active {
+  color: var(--ink);
+  border-bottom-color: var(--sage-dark);
+  font-weight: 600;
+}
+
+/* ═══════════════════════════════════════════════════
+   VIEWS
+   ═══════════════════════════════════════════════════ */
+.view { display: none; padding: 24px 0 48px; }
+.view.active { display: block; }
+
+/* ═══════════════════════════════════════════════════
+   SECTION HEADINGS
+   ═══════════════════════════════════════════════════ */
+.section-heading {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.section-heading::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border-light);
+}
+
+/* ═══════════════════════════════════════════════════
+   BUTTONS
+   ═══════════════════════════════════════════════════ */
+.btn {
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  font-weight: 500;
+  padding: 8px 16px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--white);
+  color: var(--ink-mid);
+  cursor: pointer;
+  transition: all var(--transition);
+  letter-spacing: 0.01em;
+}
+.btn:hover { background: var(--parchment-dark); border-color: var(--ink-light); color: var(--ink); }
+.btn:active { transform: scale(0.98); }
+
+.btn-primary {
+  background: var(--sage-dark);
+  border-color: var(--sage-dark);
+  color: var(--white);
+}
+.btn-primary:hover { background: var(--sage); border-color: var(--sage); color: var(--white); }
+
+.btn-danger {
+  background: var(--terracotta-bg);
+  border-color: var(--terracotta);
+  color: var(--terracotta);
+}
+.btn-danger:hover { background: var(--terracotta-light); }
+
+.btn-sm { padding: 5px 10px; font-size: 0.78rem; }
+.btn-lg { padding: 11px 24px; font-size: 0.95rem; }
+
+.btn-icon {
+  width: 32px; height: 32px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1rem;
+  border-radius: var(--radius);
+}
+
+/* ═══════════════════════════════════════════════════
+   FORM ELEMENTS
+   ═══════════════════════════════════════════════════ */
+.form-group { margin-bottom: 14px; }
+.form-label {
+  display: block;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink-mid);
+  margin-bottom: 5px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-family: var(--font-body);
+}
+.form-label .required { color: var(--terracotta); margin-left: 2px; }
+.form-control {
+  width: 100%;
+  padding: 8px 12px;
+  font-family: var(--font-body);
+  font-size: 0.9rem;
+  color: var(--ink);
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color var(--transition), box-shadow var(--transition);
+  appearance: none;
+}
+.form-control:focus {
+  outline: none;
+  border-color: var(--sage);
+  box-shadow: 0 0 0 3px rgba(122,140,106,0.15);
+}
+select.form-control { cursor: pointer; }
+
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.form-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+
+/* Tag input */
+.tag-input-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 10px;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  min-height: 40px;
+  cursor: text;
+  transition: border-color var(--transition), box-shadow var(--transition);
+}
+.tag-input-wrap:focus-within {
+  border-color: var(--sage);
+  box-shadow: 0 0 0 3px rgba(122,140,106,0.15);
+}
+.tag-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: var(--sage-bg);
+  border: 1px solid var(--sage-light);
+  border-radius: 20px;
+  font-size: 0.78rem;
+  color: var(--sage-dark);
+  font-family: var(--font-body);
+}
+.tag-pill-remove {
+  cursor: pointer;
+  color: var(--sage);
+  font-size: 0.9rem;
+  line-height: 1;
+  border: none;
+  background: none;
+  padding: 0;
+}
+.tag-pill-remove:hover { color: var(--terracotta); }
+.tag-input-field {
+  border: none;
+  outline: none;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  background: transparent;
+  color: var(--ink);
+  min-width: 80px;
+  flex: 1;
+}
+.tag-suggestions {
+  position: absolute;
+  z-index: 100;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  max-height: 160px;
+  overflow-y: auto;
+  min-width: 160px;
+}
+.tag-suggestion-item {
+  padding: 7px 12px;
+  font-size: 0.85rem;
+  font-family: var(--font-body);
+  cursor: pointer;
+  color: var(--ink-mid);
+}
+.tag-suggestion-item:hover { background: var(--parchment-dark); color: var(--ink); }
+.tag-input-container { position: relative; }
+
+/* ═══════════════════════════════════════════════════
+   CARD
+   ═══════════════════════════════════════════════════ */
+.card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px 20px;
+  box-shadow: var(--shadow);
+}
+.card + .card { margin-top: 10px; }
+
+/* ═══════════════════════════════════════════════════
+   ── CLOSET VIEW ──
+   ═══════════════════════════════════════════════════ */
+.closet-toolbar {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.closet-toolbar .search-wrap {
+  flex: 1;
+  min-width: 180px;
+  position: relative;
+}
+.closet-toolbar .search-wrap input {
+  padding-left: 32px;
+}
+.search-icon {
+  position: absolute;
+  left: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ink-light);
+  font-size: 0.85rem;
+  pointer-events: none;
+}
+.filter-chips {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+.filter-chip {
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-family: var(--font-body);
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--white);
+  color: var(--ink-light);
+  cursor: pointer;
+  transition: all var(--transition);
+  text-transform: capitalize;
+}
+.filter-chip:hover { background: var(--parchment-dark); color: var(--ink-mid); }
+.filter-chip.active {
+  background: var(--sage-dark);
+  border-color: var(--sage-dark);
+  color: var(--white);
+}
+
+/* Piece grid */
+.piece-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 12px;
+}
+.piece-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+  transition: box-shadow var(--transition), transform var(--transition);
+  cursor: default;
+  position: relative;
+}
+.piece-card:hover { box-shadow: var(--shadow-lg); transform: translateY(-1px); }
+.piece-card.archived {
+  opacity: 0.55;
+  border-style: dashed;
+}
+.piece-card-type {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-light);
+  margin-bottom: 4px;
+  font-family: var(--font-body);
+}
+.piece-card-name {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 8px;
+  line-height: 1.3;
+}
+.piece-card-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.piece-card-meta {
+  font-size: 0.75rem;
+  color: var(--ink-light);
+  font-family: var(--font-body);
+  display: flex;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.piece-card-meta span { display: flex; align-items: center; gap: 3px; }
+.piece-card-actions {
+  display: flex;
+  gap: 6px;
+  justify-content: flex-end;
+  padding-top: 8px;
+  border-top: 1px solid var(--border-light);
+}
+.archived-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  font-size: 0.65rem;
+  background: var(--parchment-mid);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 6px;
+  color: var(--ink-light);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--ink-light);
+}
+.empty-state .empty-icon { font-size: 2.5rem; margin-bottom: 12px; opacity: 0.5; }
+.empty-state h3 {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--ink-mid);
+  margin-bottom: 8px;
+}
+.empty-state p { font-size: 0.9rem; line-height: 1.6; max-width: 360px; margin: 0 auto 16px; }
+
+/* ═══════════════════════════════════════════════════
+   ── MODAL ──
+   ═══════════════════════════════════════════════════ */
+.modal-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(44,44,30,0.45);
+  z-index: 500;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+.modal-overlay.open { display: flex; }
+.modal {
+  background: var(--parchment);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 28px;
+  max-width: 520px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+}
+.modal-title {
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 20px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+.modal-footer {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border-light);
+}
+
+/* ═══════════════════════════════════════════════════
+   ── OUTFIT GENERATOR VIEW ──
+   ═══════════════════════════════════════════════════ */
+.generator-layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 24px;
+  align-items: start;
+}
+@media (max-width: 640px) {
+  .generator-layout { grid-template-columns: 1fr; }
+}
+.generator-controls { }
+.generator-panel {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  box-shadow: var(--shadow);
+}
+.generator-panel-title {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--ink-mid);
+  margin-bottom: 14px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border-light);
+}
+
+/* Current outfit display */
+.outfit-display {
+  min-height: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.outfit-slot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border-light);
+}
+.outfit-slot:last-child { border-bottom: none; }
+.outfit-slot-type {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ink-light);
+  width: 70px;
+  flex-shrink: 0;
+  font-family: var(--font-body);
+}
+.outfit-slot-piece {
+  flex: 1;
+}
+.outfit-slot-piece-name {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.outfit-slot-piece-tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 3px;
+}
+.outfit-slot-skipped {
+  font-size: 0.82rem;
+  color: var(--ink-light);
+  font-style: italic;
+  font-family: var(--font-body);
+}
+.slot-warning {
+  font-size: 0.72rem;
+  color: var(--amber);
+  font-family: var(--font-body);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 2px;
+}
+
+.outfit-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 20px;
+  flex-wrap: wrap;
+}
+
+.outfit-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  color: var(--ink-light);
+  text-align: center;
+  gap: 10px;
+}
+.outfit-placeholder p {
+  font-size: 0.9rem;
+  font-family: var(--font-body);
+  max-width: 240px;
+  line-height: 1.5;
+}
+
+/* Style selector */
+.style-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.style-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: all var(--transition);
+  background: var(--white);
+}
+.style-option:hover { background: var(--parchment-dark); border-color: var(--ink-light); }
+.style-option.selected {
+  background: var(--sage-bg);
+  border-color: var(--sage);
+}
+.style-option input[type="radio"] { accent-color: var(--sage-dark); }
+.style-option-name {
+  font-size: 0.85rem;
+  font-family: var(--font-body);
+  font-weight: 500;
+  color: var(--ink-mid);
+}
+.style-option-slots {
+  font-size: 0.72rem;
+  color: var(--ink-light);
+  font-family: var(--font-body);
+}
+
+/* Session ban status */
+.session-status {
+  font-size: 0.75rem;
+  color: var(--ink-light);
+  font-family: var(--font-body);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-light);
+}
+
+/* ═══════════════════════════════════════════════════
+   ── SAVED OUTFITS VIEW ──
+   ═══════════════════════════════════════════════════ */
+.saved-outfit-card {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 16px 18px;
+  box-shadow: var(--shadow);
+  transition: box-shadow var(--transition);
+}
+.saved-outfit-card:hover { box-shadow: var(--shadow-lg); }
+.saved-outfit-card + .saved-outfit-card { margin-top: 10px; }
+.saved-outfit-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+.saved-outfit-name {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.saved-outfit-meta {
+  font-size: 0.75rem;
+  color: var(--ink-light);
+  font-family: var(--font-body);
+  display: flex;
+  gap: 12px;
+}
+.saved-outfit-pieces {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+.saved-outfit-piece-row {
+  display: flex;
+  gap: 8px;
+  font-size: 0.85rem;
+  font-family: var(--font-body);
+}
+.saved-outfit-piece-type {
+  color: var(--ink-light);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  width: 64px;
+  flex-shrink: 0;
+  padding-top: 1px;
+}
+.saved-outfit-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+/* ═══════════════════════════════════════════════════
+   ── IMPORT/EXPORT VIEW ──
+   ═══════════════════════════════════════════════════ */
+.import-zone {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-lg);
+  padding: 32px;
+  text-align: center;
+  color: var(--ink-light);
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all var(--transition);
+  background: var(--white);
+}
+.import-zone:hover, .import-zone.drag-over {
+  border-color: var(--sage);
+  background: var(--sage-bg);
+  color: var(--sage-dark);
+}
+.import-zone p { font-size: 0.9rem; margin-bottom: 8px; }
+.import-zone small { font-size: 0.78rem; }
+
+/* ═══════════════════════════════════════════════════
+   TOAST NOTIFICATION
+   ═══════════════════════════════════════════════════ */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  pointer-events: none;
+}
+.toast {
+  background: var(--ink);
+  color: var(--parchment);
+  padding: 10px 16px;
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  font-family: var(--font-body);
+  box-shadow: var(--shadow-lg);
+  opacity: 0;
+  transform: translateY(8px);
+  transition: opacity 0.2s, transform 0.2s;
+  max-width: 300px;
+}
+.toast.show { opacity: 1; transform: translateY(0); }
+.toast.success { background: var(--sage-dark); }
+.toast.error { background: var(--terracotta); }
+.toast.warning { background: var(--amber); color: var(--ink); }
+
+/* ═══════════════════════════════════════════════════
+   MISC UTILITIES
+   ═══════════════════════════════════════════════════ */
+.divider { height: 1px; background: var(--border-light); margin: 20px 0; }
+.text-muted { color: var(--ink-light); font-size: 0.85rem; }
+.text-small { font-size: 0.78rem; }
+.flex-between { display: flex; align-items: center; justify-content: space-between; }
+.flex-gap { display: flex; align-items: center; gap: 8px; }
+.mt-4 { margin-top: 4px; }
+.mt-8 { margin-top: 8px; }
+.mt-16 { margin-top: 16px; }
+.alert {
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  font-family: var(--font-body);
+  margin-bottom: 14px;
+  border: 1px solid;
+}
+.alert-error {
+  background: var(--terracotta-bg);
+  border-color: var(--terracotta);
+  color: var(--terracotta);
+}
+.alert-success {
+  background: var(--sage-bg);
+  border-color: var(--sage);
+  color: var(--sage-dark);
+}
+.alert-warning {
+  background: var(--amber-bg);
+  border-color: var(--amber);
+  color: var(--amber);
+}
+/* ═══════════════════════════════════════════════════
+   ── WEAR HISTORY VIEW ──
+   ═══════════════════════════════════════════════════ */
+.history-day {
+  margin-bottom: 24px;
+}
+.history-day-header {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.history-day-date {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.history-day-count {
+  font-size: 0.75rem;
+  color: var(--ink-light);
+  font-family: var(--font-body);
+}
+.history-entry {
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  box-shadow: var(--shadow);
+  margin-bottom: 8px;
+}
+.history-entry-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.history-entry-name {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.history-entry-pieces {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 8px;
+}
+.history-entry-piece {
+  font-size: 0.82rem;
+  font-family: var(--font-body);
+  color: var(--ink-mid);
+  display: flex;
+  gap: 8px;
+}
+.history-entry-piece-type {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-weight: 600;
+  color: var(--ink-light);
+  width: 60px;
+  flex-shrink: 0;
+}
+.history-note {
+  font-size: 0.82rem;
+  font-family: var(--font-body);
+  color: var(--ink-mid);
+  font-style: italic;
+  border-top: 1px solid var(--border-light);
+  padding-top: 8px;
+  margin-top: 4px;
+}
+.history-note-input {
+  width: 100%;
+  font-family: var(--font-body);
+  font-size: 0.82rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+  background: var(--parchment);
+  color: var(--ink);
+  resize: none;
+}
+.history-note-input:focus {
+  outline: none;
+  border-color: var(--sage);
+  box-shadow: 0 0 0 3px rgba(122,140,106,0.12);
+}
+
+/* ═══════════════════════════════════════════════════
+   ── CUSTOM STYLE BUILDER ──
+   ═══════════════════════════════════════════════════ */
+.slot-builder {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.slot-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto auto;
+  gap: 8px;
+  align-items: center;
+  padding: 10px 12px;
+  background: var(--parchment-dark);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.slot-row-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-light);
+  font-family: var(--font-body);
+  margin-bottom: 3px;
+}
+.slot-required-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.8rem;
+  font-family: var(--font-body);
+  color: var(--ink-mid);
+  cursor: pointer;
+}
+.slot-required-toggle input { accent-color: var(--sage-dark); }
+
+/* ═══════════════════════════════════════════════════
+   ── TYPE MANAGER ──
+   ═══════════════════════════════════════════════════ */
+.type-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.type-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-family: var(--font-body);
+  font-weight: 500;
+  border: 1px solid var(--border);
+  background: var(--white);
+  color: var(--ink-mid);
+  text-transform: capitalize;
+}
+.type-chip.builtin {
+  background: var(--parchment-dark);
+  color: var(--ink-light);
+}
+.type-chip-remove {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: var(--ink-light);
+  font-size: 0.9rem;
+  padding: 0;
+  line-height: 1;
+}
+.type-chip-remove:hover { color: var(--terracotta); }
+
+/* ═══════════════════════════════════════════════════
+   ── IMPACT PREVIEW ──
+   ═══════════════════════════════════════════════════ */
+.impact-stat-row {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+.impact-stat {
+  flex: 1;
+  text-align: center;
+  padding: 12px;
+  background: var(--parchment-dark);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.impact-stat-number {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.1;
+}
+.impact-stat-label {
+  font-size: 0.72rem;
+  color: var(--ink-light);
+  font-family: var(--font-body);
+  margin-top: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.impact-stat.warn .impact-stat-number { color: var(--terracotta); }
+.impact-stat.good .impact-stat-number { color: var(--sage-dark); }
+.impact-affected-list {
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--white);
+  margin-bottom: 12px;
+}
+.impact-affected-item {
+  padding: 8px 12px;
+  font-size: 0.82rem;
+  font-family: var(--font-body);
+  border-bottom: 1px solid var(--border-light);
+  color: var(--ink-mid);
+}
+.impact-affected-item:last-child { border-bottom: none; }
+
+/* ═══════════════════════════════════════════════════
+   ── CONFLICT RULES ──
+   ═══════════════════════════════════════════════════ */
+.conflict-rule-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-top: 8px;
+}
+.conflict-rule-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 10px;
+  background: var(--amber-bg);
+  border: 1px solid var(--amber-light);
+  border-radius: var(--radius);
+  font-size: 0.8rem;
+  font-family: var(--font-body);
+  color: var(--ink-mid);
+}
+.conflict-rule-row span { flex: 1; }
+
+/* ═══════════════════════════════════════════════════
+   ── TAG MANAGER ──
+   ═══════════════════════════════════════════════════ */
+.tag-manager-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--border-light);
+  font-family: var(--font-body);
+}
+.tag-manager-row:last-child { border-bottom: none; }
+.tag-manager-row:hover { background: var(--parchment-dark); }
+.tag-manager-name {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 0.88rem;
+  color: var(--ink-mid);
+  cursor: pointer;
+  flex: 1;
+}
+.tag-manager-name:hover { color: var(--sage-dark); }
+.tag-manager-count {
+  font-size: 0.72rem;
+  color: var(--ink-light);
+  background: var(--parchment-dark);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 1px 8px;
+}
+.tag-manager-actions { display: flex; gap: 6px; margin-left: 8px; }
+
+</style>
+</head>
+<body>
+
+<!-- ═══════════════════════════════════════════════════
+     APP SHELL
+     ═══════════════════════════════════════════════════ -->
+<div class="app-shell">
+
+  <!-- Header -->
+  <header class="app-header">
+    <div>
+      <h1 class="app-title">[App Name TBD] <span>wardrobe</span></h1>
+    </div>
+    <div class="header-meta" id="header-stats">
+      <span><strong id="stat-pieces">0</strong> pieces</span>
+      <span><strong id="stat-outfits">0</strong> saved outfits</span>
+    </div>
+  </header>
+
+  <!-- Nav -->
+  <nav class="app-nav">
+    <button class="nav-tab active" onclick="switchView('closet')">Closet</button>
+    <button class="nav-tab" onclick="switchView('generator')">Generator</button>
+    <button class="nav-tab" onclick="switchView('saved')">Saved Outfits</button>
+    <button class="nav-tab" onclick="switchView('history')">Wear History</button>
+    <button class="nav-tab" onclick="switchView('data')">Import / Export</button>
+  </nav>
+
+  <!-- ─────────────────────────────────────────────────
+       VIEW: CLOSET
+       ───────────────────────────────────────────────── -->
+  <section class="view active" id="view-closet">
+
+    <!-- Toolbar -->
+    <div class="closet-toolbar">
+      <div class="search-wrap">
+        <span class="search-icon">🔍</span>
+        <input class="form-control" id="search-input" type="text" placeholder="Search pieces…" oninput="renderCloset()">
+      </div>
+      <button class="btn btn-primary" onclick="openAddPiece()">+ Add Piece</button>
+      <button class="btn" onclick="openManageTypes()">Manage Types</button>
+      <button class="btn" onclick="openManageTags()">Manage Tags</button>
+      <button class="btn" onclick="toggleArchived()" id="btn-show-archived">Show Archived</button>
+    </div>
+
+    <!-- Filter chips (by type) -->
+    <div class="filter-chips" id="type-filters">
+      <button class="filter-chip active" data-type="all" onclick="setTypeFilter('all', this)">All</button>
+      <button class="filter-chip" data-type="top" onclick="setTypeFilter('top', this)">Tops</button>
+      <button class="filter-chip" data-type="bottom" onclick="setTypeFilter('bottom', this)">Bottoms</button>
+      <button class="filter-chip" data-type="shoes" onclick="setTypeFilter('shoes', this)">Shoes</button>
+      <button class="filter-chip" data-type="jacket" onclick="setTypeFilter('jacket', this)">Jackets</button>
+      <button class="filter-chip" data-type="accessory" onclick="setTypeFilter('accessory', this)">Accessories</button>
+      <button class="filter-chip" data-type="other" onclick="setTypeFilter('other', this)">Other</button>
+    </div>
+
+    <!-- Piece grid -->
+    <div class="piece-grid" id="piece-grid"></div>
+
+  </section>
+
+  <!-- ─────────────────────────────────────────────────
+       VIEW: OUTFIT GENERATOR
+       ───────────────────────────────────────────────── -->
+  <section class="view" id="view-generator">
+    <div class="generator-layout">
+
+      <!-- Left: Controls -->
+      <div class="generator-controls">
+
+        <div class="generator-panel">
+          <div class="generator-panel-title">Outfit Style</div>
+          <div class="style-selector" id="style-selector"></div>
+          <button class="btn" style="width:100%; margin-top:8px; font-size:0.82rem;" onclick="openAddStyle()">+ Add Custom Style</button>
+          <button class="btn btn-primary btn-lg" style="width:100%; margin-top:8px;" onclick="generateOutfit()">
+            Generate Outfit
+          </button>
+          <div class="session-status">
+            <span id="session-ban-count">0 combinations hidden this session</span>
+            <button class="btn btn-sm" onclick="resetSession()">Reset rolls</button>
+          </div>
+        </div>
+
+        <div class="generator-panel" style="margin-top:12px;">
+          <div class="generator-panel-title">Outfit Count</div>
+          <div id="outfit-count-display" style="font-family:var(--font-display);font-size:1.6rem;font-weight:700;color:var(--sage-dark);line-height:1.1;">—</div>
+          <div style="font-size:0.75rem;color:var(--ink-light);font-family:var(--font-body);margin-top:4px;" id="outfit-count-formula">Select a style to calculate</div>
+        </div>
+
+      </div>
+
+      <!-- Right: Current outfit display -->
+      <div>
+        <div class="generator-panel">
+          <div class="generator-panel-title">Current Outfit</div>
+          <div class="outfit-display" id="outfit-display">
+            <div class="outfit-placeholder">
+              <div style="font-size:2rem;opacity:0.4;">👔</div>
+              <p>Choose a style and tap Generate to build your first outfit.</p>
+            </div>
+          </div>
+          <div class="outfit-actions" id="outfit-actions" style="display:none;">
+            <button class="btn btn-primary btn-lg" onclick="saveCurrentOutfit()">♡ Save Outfit</button>
+            <button class="btn btn-lg" onclick="generateOutfit()">↻ Reroll</button>
+            <button class="btn btn-lg" onclick="wearCurrentOutfit()" style="background:var(--amber-bg);border-color:var(--amber);color:var(--amber);">👔 Wore This</button>
+            <button class="btn btn-danger btn-lg" onclick="blockCurrentOutfit()">✕ Block This</button>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────
+       VIEW: SAVED OUTFITS
+       ───────────────────────────────────────────────── -->
+  <section class="view" id="view-saved">
+    <div class="section-heading">Saved Outfits</div>
+    <div id="saved-outfits-list"></div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────
+       VIEW: WEAR HISTORY
+       ───────────────────────────────────────────────── -->
+  <section class="view" id="view-history">
+    <div class="section-heading">Wear History</div>
+    <div id="wear-history-list"></div>
+  </section>
+
+  <!-- ─────────────────────────────────────────────────
+       VIEW: IMPORT / EXPORT
+       ───────────────────────────────────────────────── -->
+  <section class="view" id="view-data">
+    <div class="section-heading">Import & Export</div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <h3 style="font-family:var(--font-display);font-size:1rem;font-weight:600;margin-bottom:8px;">Export Wardrobe</h3>
+      <p class="text-muted" style="margin-bottom:14px;">Download your closet and saved outfits as a ZIP file (CSV + JSON).</p>
+      <button class="btn btn-primary" onclick="exportZip()">⬇ Download ZIP</button>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <h3 style="font-family:var(--font-display);font-size:1rem;font-weight:600;margin-bottom:8px;">Import from CSV</h3>
+      <p class="text-muted" style="margin-bottom:6px;">Upload a CSV with columns: <code>name, type, quantity</code> (required). Optional extra columns become tags.</p>
+      <p class="text-muted" style="margin-bottom:14px; font-size:0.78rem;">Valid types: top, bottom, shoes, jacket, accessory, other</p>
+      <div id="csv-error"></div>
+      <div class="import-zone" id="csv-drop-zone" onclick="document.getElementById('csv-file-input').click()">
+        <p>Click to choose a CSV file, or drag and drop here</p>
+        <small>Columns: name, type, quantity — additional columns become tags</small>
+      </div>
+      <input type="file" id="csv-file-input" accept=".csv" style="display:none" onchange="handleCsvUpload(event)">
+    </div>
+
+    <div class="card">
+      <h3 style="font-family:var(--font-display);font-size:1rem;font-weight:600;margin-bottom:8px;">Import from JSON</h3>
+      <p class="text-muted" style="margin-bottom:14px;">Restore a previously exported wardrobe JSON backup.</p>
+      <div id="json-error"></div>
+      <div class="import-zone" id="json-drop-zone" onclick="document.getElementById('json-file-input').click()">
+        <p>Click to choose a JSON backup file</p>
+        <small>This will merge with your existing wardrobe (no data is deleted)</small>
+      </div>
+      <input type="file" id="json-file-input" accept=".json" style="display:none" onchange="handleJsonUpload(event)">
+    </div>
+  </section>
+
+</div><!-- /.app-shell -->
+
+<!-- ═══════════════════════════════════════════════════
+     MODALS
+     ═══════════════════════════════════════════════════ -->
+
+<!-- Add / Edit Piece Modal -->
+<div class="modal-overlay" id="modal-piece">
+  <div class="modal">
+    <h2 class="modal-title" id="modal-piece-title">Add Piece</h2>
+    <form id="piece-form" onsubmit="savePiece(event)">
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Name <span class="required">*</span></label>
+          <input class="form-control" id="field-name" type="text" placeholder="e.g. White Oxford Shirt" required>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Type <span class="required">*</span></label>
+          <select class="form-control" id="field-type" required>
+            <option value="">— select —</option>
+          </select>
+          <div style="font-size:0.75rem;color:var(--ink-light);font-family:var(--font-body);margin-top:3px;">
+            New types can be added in Closet → Manage Types
+          </div>
+        </div>
+      </div>
+
+      <div class="form-group" style="max-width:140px;">
+        <label class="form-label">Quantity <span class="required">*</span></label>
+        <input class="form-control" id="field-qty" type="number" min="1" value="1" required>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">Tags</label>
+        <div class="tag-input-container">
+          <div class="tag-input-wrap" id="tag-input-wrap" onclick="document.getElementById('tag-field').focus()">
+            <!-- tag pills injected here -->
+            <input class="tag-input-field" id="tag-field" type="text" placeholder="Type a tag and press Enter…"
+              oninput="onTagInput()" onkeydown="onTagKeydown(event)">
+          </div>
+          <div class="tag-suggestions" id="tag-suggestions" style="display:none;"></div>
+        </div>
+        <div class="text-muted mt-4" style="font-size:0.75rem;">Examples: navy, slim-fit, linen, summer, casual, Nike</div>
+      </div>
+
+      <div id="piece-form-error"></div>
+
+      <div class="modal-footer">
+        <button type="button" class="btn" onclick="closeModal('modal-piece')">Cancel</button>
+        <button type="submit" class="btn btn-primary" id="piece-save-btn">Add Piece</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Save Outfit Modal -->
+<div class="modal-overlay" id="modal-save-outfit">
+  <div class="modal">
+    <h2 class="modal-title">Save Outfit</h2>
+    <div class="form-group">
+      <label class="form-label">Outfit Name <span class="required">*</span></label>
+      <input class="form-control" id="field-outfit-name" type="text" placeholder="e.g. Sunday Brunch, Office Casual…">
+    </div>
+    <div id="save-outfit-preview" style="margin-top:8px;"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-save-outfit')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmSaveOutfit()">Save</button>
+    </div>
+  </div>
+</div>
+
+<!-- Confirm Block Modal -->
+<div class="modal-overlay" id="modal-block">
+  <div class="modal">
+    <h2 class="modal-title">Block This Combination?</h2>
+    <p style="font-family:var(--font-body);font-size:0.9rem;color:var(--ink-mid);margin-bottom:16px;line-height:1.6;">
+      This outfit combination will <strong>permanently</strong> never be generated again. Individual pieces are not affected — they can still appear in other outfits.
+    </p>
+    <div id="block-outfit-preview"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-block')">Cancel</button>
+      <button class="btn btn-danger" onclick="confirmBlock()">Block Permanently</button>
+    </div>
+  </div>
+</div>
+
+<!-- Custom Style Builder Modal -->
+<div class="modal-overlay" id="modal-style">
+  <div class="modal" style="max-width:580px;">
+    <h2 class="modal-title" id="modal-style-title">Add Custom Style</h2>
+
+    <div class="form-group">
+      <label class="form-label">Style Name <span class="required">*</span></label>
+      <input class="form-control" id="field-style-name" type="text" placeholder="e.g. Summer Casual, Smart Weekend…">
+    </div>
+
+    <div style="margin-bottom:6px;">
+      <div class="form-label" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Slots <span class="required">*</span></span>
+        <button type="button" class="btn btn-sm" onclick="addSlotRow()">+ Add Slot</button>
+      </div>
+      <div style="font-size:0.75rem;color:var(--ink-light);font-family:var(--font-body);margin-bottom:8px;">
+        Each slot picks one piece from that type. Required slots must have a match or generation stops.
+      </div>
+      <div class="slot-builder" id="slot-builder">
+        <!-- slot rows injected here -->
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-top:4px;">
+      <label class="form-label">Globally Exclude Tags</label>
+      <div class="tag-input-container">
+        <div class="tag-input-wrap" id="style-global-exclude-wrap" onclick="document.getElementById('style-global-exclude-field').focus()">
+          <input class="tag-input-field" id="style-global-exclude-field" type="text"
+            placeholder="Tags to exclude from entire outfit…"
+            oninput="onStyleGlobalTagInput()" onkeydown="onStyleGlobalTagKeydown(event)">
+        </div>
+        <div class="tag-suggestions" id="style-global-tag-suggestions" style="display:none;"></div>
+      </div>
+      <div style="font-size:0.75rem;color:var(--ink-light);font-family:var(--font-body);margin-top:4px;">
+        Pieces with any of these tags will never be selected for this style.
+      </div>
+    </div>
+
+    <div class="form-group" style="margin-top:4px;">
+      <div class="form-label" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>Conflict Rules</span>
+        <button type="button" class="btn btn-sm" onclick="addConflictRule()">+ Add Rule</button>
+      </div>
+      <div style="font-size:0.75rem;color:var(--ink-light);font-family:var(--font-body);margin-bottom:6px;">
+        Prevent a tag in one slot from pairing with a tag in another. Example: if Slot 1 picks "t-shirt", exclude "t-shirt" from Slot 2.
+      </div>
+      <div id="conflict-rules-container">
+        <div style="font-size:0.78rem;color:var(--ink-light);font-family:var(--font-body);">No conflict rules yet.</div>
+      </div>
+    </div>
+
+    <div id="style-form-error"></div>
+
+    <div class="modal-footer">
+      <button type="button" class="btn" onclick="closeModal('modal-style')">Cancel</button>
+      <button type="button" class="btn btn-primary" onclick="saveCustomStyle()">Save Style</button>
+    </div>
+  </div>
+</div>
+
+<!-- Log Wear (unsaved outfit) Modal -->
+<div class="modal-overlay" id="modal-log-wear">
+  <div class="modal">
+    <h2 class="modal-title">Log This Outfit as Worn</h2>
+    <p style="font-size:0.88rem;color:var(--ink-mid);font-family:var(--font-body);margin-bottom:16px;">
+      This will record today's date and update wear counts on each piece. You can add an optional note.
+    </p>
+    <div id="log-wear-preview" style="margin-bottom:16px;"></div>
+    <div class="form-group">
+      <label class="form-label">Note <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>
+      <textarea class="history-note-input" id="field-wear-note" rows="3"
+        placeholder="e.g. 85°F and sunny, wore to dinner…"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-log-wear')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmLogWear()" style="background:var(--amber);border-color:var(--amber);">Log as Worn</button>
+    </div>
+  </div>
+</div>
+
+<!-- Manage Tags Modal -->
+<div class="modal-overlay" id="modal-tags">
+  <div class="modal" style="max-width:560px;">
+    <h2 class="modal-title">Manage Tags</h2>
+    <p style="font-size:0.85rem;color:var(--ink-mid);font-family:var(--font-body);margin-bottom:12px;">
+      All tags used across your closet. Click a tag to filter pieces by it. Remove tags that are no longer used.
+    </p>
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <input class="form-control" id="tag-manager-search" type="text"
+        placeholder="Search tags…" oninput="renderTagManager()">
+    </div>
+    <div id="tag-manager-list" style="max-height:360px;overflow-y:auto;"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="pruneUnusedTags()">Remove All Unused</button>
+      <button class="btn btn-primary" onclick="closeModal('modal-tags')">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Manage Types Modal -->
+<div class="modal-overlay" id="modal-types">
+  <div class="modal">
+    <h2 class="modal-title">Manage Piece Types</h2>
+    <p style="font-size:0.85rem;color:var(--ink-mid);font-family:var(--font-body);margin-bottom:16px;">
+      Types are used to organise your closet and define outfit slots. Add your own — anything goes.
+    </p>
+    <div id="type-list" style="margin-bottom:16px;"></div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <input class="form-control" id="field-new-type" type="text"
+        placeholder="New type name…" style="flex:1;"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();addCustomType();}">
+      <button class="btn btn-primary" onclick="addCustomType()">Add</button>
+    </div>
+    <div id="type-error" style="margin-top:8px;"></div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="closeModal('modal-types')">Done</button>
+    </div>
+  </div>
+</div>
+
+<!-- Impact Preview Modal -->
+<div class="modal-overlay" id="modal-impact">
+  <div class="modal" style="max-width:560px;">
+    <h2 class="modal-title" id="modal-impact-title">Impact Preview</h2>
+    <div id="impact-content"></div>
+    <div class="modal-footer" id="impact-footer"></div>
+  </div>
+</div>
+
+<!-- Swap / Upgrade Modal -->
+<div class="modal-overlay" id="modal-swap">
+  <div class="modal" style="max-width:560px;">
+    <h2 class="modal-title">Swap / Upgrade Piece</h2>
+    <div id="swap-old-piece-info" style="margin-bottom:16px;"></div>
+    <div class="form-group">
+      <label class="form-label">Replace with <span class="required">*</span></label>
+      <select class="form-control" id="swap-replacement-select">
+        <option value="">— choose replacement piece —</option>
+      </select>
+      <div style="font-size:0.75rem;color:var(--ink-light);font-family:var(--font-body);margin-top:4px;">
+        Only pieces of the same type are shown. The old piece will be archived; all saved outfits referencing it will point to the new piece.
+      </div>
+    </div>
+    <div style="margin-bottom:8px;">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:0.85rem;font-family:var(--font-body);color:var(--ink-mid);">
+        <input type="checkbox" id="swap-create-new" onchange="toggleSwapCreateNew()" style="accent-color:var(--sage-dark);">
+        Create a new piece as the replacement instead
+      </label>
+    </div>
+    <div id="swap-new-piece-form" style="display:none;padding:12px;background:var(--parchment-dark);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:8px;">
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Name <span class="required">*</span></label>
+          <input class="form-control" id="swap-new-name" type="text" placeholder="New piece name…">
+        </div>
+        <div class="form-group" style="max-width:120px;">
+          <label class="form-label">Qty</label>
+          <input class="form-control" id="swap-new-qty" type="number" min="1" value="1">
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tags</label>
+        <input class="form-control" id="swap-new-tags" type="text" placeholder="tag1, tag2, tag3…">
+        <div style="font-size:0.72rem;color:var(--ink-light);margin-top:3px;">Comma-separated</div>
+      </div>
+    </div>
+    <div id="swap-error"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-swap')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmSwap()">Confirm Swap</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast container -->
+<div class="toast-container" id="toast-container"></div>
+
+<!-- ═══════════════════════════════════════════════════
+     JAVASCRIPT
+     ═══════════════════════════════════════════════════ -->
+<script>
+'use strict';
+
+// ─────────────────────────────────────────────────────────────
+// CONSTANTS & ENUMS
+// ─────────────────────────────────────────────────────────────
+const PIECE_TYPES = ['top','bottom','shoes','jacket','accessory','other'];
+
+// Built-in outfit base styles shipped with the app.
+// Each slot has: type, required (bool), requiredTags[], excludedTags[], count
+const DEFAULT_STYLES = [
+  {
+    id: 'default-everyday',
+    name: 'Everyday',
+    isDefault: true,
+    slots: [
+      { type: 'top',    required: true,  requiredTags: [], excludedTags: [], count: 1 },
+      { type: 'bottom', required: true,  requiredTags: [], excludedTags: [], count: 1 },
+      { type: 'shoes',  required: false, requiredTags: [], excludedTags: [], count: 1 },
+    ],
+    globalExcludeTags: []
+  },
+  {
+    id: 'default-layered',
+    name: 'Layered',
+    isDefault: true,
+    slots: [
+      { type: 'top',    required: true,  requiredTags: [], excludedTags: [], count: 1 },
+      { type: 'jacket', required: false, requiredTags: [], excludedTags: [], count: 1 },
+      { type: 'bottom', required: true,  requiredTags: [], excludedTags: [], count: 1 },
+      { type: 'shoes',  required: false, requiredTags: [], excludedTags: [], count: 1 },
+    ],
+    globalExcludeTags: []
+  }
+];
+
+// ─────────────────────────────────────────────────────────────
+// STATE — all persisted to localStorage except sessionBanList
+// ─────────────────────────────────────────────────────────────
+let state = {
+  pieces: [],        // Array of piece objects
+  outfits: [],       // Array of saved outfit objects
+  styles: [],        // User-created outfit base styles (defaults are merged at runtime)
+  blockedList: [],   // Array of sorted hash strings — permanent
+  tagRegistry: [],   // Sorted deduplicated array of all tags ever used
+  wearHistory: [],   // Array of wear log entries {id, date, outfitId|null, pieceIds, outfitName, note}
+  typeRegistry: [],  // User-managed piece types — extends the built-in defaults
+};
+
+// Session-only (not persisted)
+let sessionBanList = [];   // Hashed sorted ID strings banned this session
+let currentOutfit  = null; // Currently displayed candidate outfit
+let editingPieceId = null; // ID of piece being edited, or null for new
+let currentTags    = [];   // Tags being edited in the piece form
+let swappingPieceId = null; // ID of piece being swapped/upgraded
+
+// UI state
+let activeTypeFilter   = 'all';
+let showArchived       = false;
+let selectedStyleId    = 'default-everyday';
+
+// ─────────────────────────────────────────────────────────────
+// PERSISTENCE — load / save localStorage
+// ─────────────────────────────────────────────────────────────
+
+/** Load all state from localStorage. Missing keys get defaults. */
+function loadState() {
+  try {
+    const raw = localStorage.getItem('wardrobe_state');
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      state.pieces      = parsed.pieces      || [];
+      state.outfits     = parsed.outfits     || [];
+      state.styles      = parsed.styles      || [];
+      state.blockedList = parsed.blockedList || [];
+      state.tagRegistry = parsed.tagRegistry || [];
+      state.wearHistory = parsed.wearHistory || [];
+      state.typeRegistry = parsed.typeRegistry || [];
+    }
+  } catch(e) {
+    console.error('Failed to load state:', e);
+    showToast('Could not load saved data. Starting fresh.', 'error');
+  }
+}
+
+/** Persist all state to localStorage. */
+function saveState() {
+  try {
+    localStorage.setItem('wardrobe_state', JSON.stringify(state));
+  } catch(e) {
+    console.error('Failed to save state:', e);
+    showToast('Could not save data — storage may be full.', 'error');
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// ID GENERATION
+// ─────────────────────────────────────────────────────────────
+
+/** Generate a simple unique ID (timestamp + random). */
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
+
+// ─────────────────────────────────────────────────────────────
+// TAG REGISTRY
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Add tags to the global registry, keeping it sorted and deduplicated.
+ * @param {string[]} tags
+ */
+function registerTags(tags) {
+  tags.forEach(t => {
+    const clean = t.trim().toLowerCase();
+    if (clean && !state.tagRegistry.includes(clean)) {
+      state.tagRegistry.push(clean);
+    }
+  });
+  state.tagRegistry.sort();
+}
+
+/**
+ * Remove a tag from the registry if no pieces use it.
+ * @param {string} tag
+ */
+function pruneTag(tag) {
+  const used = state.pieces.some(p => p.tags.includes(tag));
+  if (!used) {
+    state.tagRegistry = state.tagRegistry.filter(t => t !== tag);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+// OUTFIT COMBINATION HASHING
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Given an array of piece IDs, produce a deterministic hash string.
+ * Used for blocked/session-ban list lookups.
+ * @param {string[]} pieceIds
+ * @returns {string}
+ */
+function hashOutfit(pieceIds) {
+  return [...pieceIds].sort().join('|');
+}
+
+// ─────────────────────────────────────────────────────────────
+// OUTFIT GENERATION ALGORITHM (Blocks A–I from the spec)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Get all active (non-archived) pieces.
+ * @returns {object[]}
+ */
+function activePieces() {
+  return state.pieces.filter(p => !p.archived);
+}
+
+/**
+ * Get the full list of base styles (built-in defaults merged with user styles).
+ * User styles with matching IDs override built-in defaults.
+ * @returns {object[]}
+ */
+function getAllStyles() {
+  const userIds = state.styles.map(s => s.id);
+  const defaults = DEFAULT_STYLES.filter(d => !userIds.includes(d.id));
+  return [...defaults, ...state.styles];
+}
+
+/**
+ * Get the currently selected style object.
+ * @returns {object|null}
+ */
+function getSelectedStyle() {
+  return getAllStyles().find(s => s.id === selectedStyleId) || null;
+}
+
+/**
+ * Block B: Filter the active closet to find eligible pieces for a given slot.
+ * Applies: type match, required tags, excluded tags, global excludes,
+ * and any session-level exclude tags (stored on the style as sessionExcludeTags).
+ * @param {object} slot - SlotRule
+ * @param {string[]} globalExcludeTags
+ * @returns {object[]} eligible pieces
+ */
+function filterSlot(slot, globalExcludeTags) {
+  return activePieces().filter(piece => {
+    // Type must match
+    if (piece.type !== slot.type) return false;
+    // Must have all required tags
+    if (slot.requiredTags.some(t => !piece.tags.includes(t))) return false;
+    // Must not have any excluded tags (slot-level)
+    if (slot.excludedTags.some(t => piece.tags.includes(t))) return false;
+    // Must not have any global excluded tags
+    if (globalExcludeTags.some(t => piece.tags.includes(t))) return false;
+    return true;
+  });
+}
+
+/**
+ * Pick `count` random distinct items from an array.
+ * @param {any[]} arr
+ * @param {number} count
+ * @returns {any[]}
+ */
+function pickRandom(arr, count) {
+  const shuffled = [...arr].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, count);
+}
+
+/**
+ * Main generation function — runs Blocks B through F.
+ * Returns a candidate outfit object or null if generation failed.
+ *
+ * Returned outfit format:
+ * {
+ *   slots: [{type, piece|null, skipped, skipReason}],
+ *   pieceIds: string[],
+ *   hash: string
+ * }
+ *
+ * @param {object} style
+ * @param {number} maxRetries
+ * @returns {object|null}
+ */
+function runGeneration(style, maxRetries = 50) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+
+    // ── Block B: Filter eligible pieces per slot ──────────────────────────
+    const resolvedSlots = [];
+    let hardFail = false;
+    let hardFailSlot = null;
+
+    for (const slot of style.slots) {
+      const pool = filterSlot(slot, style.globalExcludeTags || []);
+
+      // ── Block C: Empty slot check ─────────────────────────────────────
+      if (pool.length === 0) {
+        if (slot.required) {
+          // Required slot empty — hard stop
+          hardFail = true;
+          hardFailSlot = slot;
+          break;
+        } else {
+          // Optional slot empty — skip with a warning reason
+          const hasAnyOfType = activePieces().some(p => p.type === slot.type);
+          resolvedSlots.push({
+            type: slot.type,
+            pool: [],
+            skipped: true,
+            skipReason: hasAnyOfType ? 'all-filtered' : 'no-pieces'
+          });
+        }
+      } else {
+        resolvedSlots.push({ type: slot.type, pool, skipped: false, skipReason: null });
+      }
+    }
+
+    // If a required slot had no eligible pieces, we can't generate
+    if (hardFail) {
+      return { error: 'required-empty', slot: hardFailSlot };
+    }
+
+    // ── Block D: Random selection per slot ───────────────────────────────
+    // Pick a piece for each resolved slot, then apply conflict rules to
+    // narrow subsequent slots. selectedSlots builds up sequentially so
+    // earlier picks can restrict later ones via conflictRules.
+    const selectedSlots = [];
+    for (const rs of resolvedSlots) {
+      if (rs.skipped) {
+        selectedSlots.push({ type: rs.type, piece: null, skipped: true, skipReason: rs.skipReason });
+        continue;
+      }
+
+      // Apply conflict rules: for each rule, if an already-selected slot
+      // picked a piece with rule.ifTag, exclude rule.thenExcludeTag from
+      // THIS slot if this slot's index matches rule.thenSlotIndex.
+      const thisSlotIndex = resolvedSlots.indexOf(rs);
+      let filteredPool = [...rs.pool];
+
+      if (style.conflictRules && style.conflictRules.length > 0) {
+        style.conflictRules.forEach(rule => {
+          if (rule.thenSlotIndex !== thisSlotIndex) return;
+          // Check if the "if" slot has already been selected
+          const ifSlot = selectedSlots[rule.ifSlotIndex];
+          if (!ifSlot || !ifSlot.piece) return;
+          // If the selected piece in the "if" slot has the trigger tag,
+          // exclude the "then" tag from this slot's pool
+          if (ifSlot.piece.tags.includes(rule.ifTag)) {
+            filteredPool = filteredPool.filter(p => !p.tags.includes(rule.thenExcludeTag));
+          }
+        });
+      }
+
+      // If conflict rules emptied the pool, retry the entire attempt (different
+      // random picks earlier in the slot order may avoid triggering this rule).
+      // Only hard-stop if it's a required slot AND the base pool (pre-conflict)
+      // had pieces — meaning the conflict rule is the only cause of exhaustion.
+      if (filteredPool.length === 0) {
+        // Signal a soft fail — break out of Block D and let the retry loop handle it
+        hardFail = true;
+        hardFailSlot = null; // null = conflict-caused, not a true empty-pool stop
+        break;
+      }
+
+      const picked = pickRandom(filteredPool, 1);
+      selectedSlots.push({ type: rs.type, piece: picked[0], skipped: false, skipReason: null });
+    }
+
+    // Block D conflict-caused failure: retry from Block B (don't hard-stop)
+    if (hardFail && hardFailSlot === null) continue; // next attempt
+    // Block D true required-empty: permanent stop
+    if (hardFail) return { error: 'required-empty', slot: hardFailSlot };
+
+    // ── Block E: Assemble outfit ─────────────────────────────────────────
+    const pieceIds = selectedSlots
+      .filter(s => s.piece)
+      .map(s => s.piece.id);
+
+    if (pieceIds.length === 0) {
+      return { error: 'no-pieces', slot: null };
+    }
+
+    // ── Block F: Block + session-ban check ───────────────────────────────
+    const hash = hashOutfit(pieceIds);
+    const isBlocked = state.blockedList.includes(hash);
+    const isBanned  = sessionBanList.includes(hash);
+
+    if (!isBlocked && !isBanned) {
+      // ── Pass: return the candidate outfit ────────────────────────────
+      return { slots: selectedSlots, pieceIds, hash, error: null };
+    }
+
+    // If blocked/banned: add to session ban and retry from B (next iteration)
+    if (!sessionBanList.includes(hash)) sessionBanList.push(hash);
+  }
+
+  // Max retries reached
+  return { error: 'exhausted', slot: null };
+}
+
+/**
+ * Generate an outfit and update the UI.
+ * Called by the Generate button and the Reroll button.
+ */
+function generateOutfit() {
+  const style = getSelectedStyle();
+  if (!style) { showToast('Select an outfit style first.', 'warning'); return; }
+
+  const result = runGeneration(style);
+
+  if (result.error === 'required-empty') {
+    showToast(`No eligible pieces for slot: "${result.slot.type}". Add pieces or adjust filters.`, 'error');
+    renderOutfitDisplay(null);
+    return;
+  }
+  if (result.error === 'exhausted') {
+    showToast('All combinations have been shown or blocked. Try "Reset rolls" or adjust your style.', 'warning');
+    renderOutfitDisplay(null);
+    return;
+  }
+  if (result.error === 'no-pieces') {
+    showToast('No active pieces found. Add some pieces to your closet first.', 'error');
+    renderOutfitDisplay(null);
+    return;
+  }
+
+  // Add this outfit to the session ban so reroll doesn't repeat it
+  if (!sessionBanList.includes(result.hash)) {
+    sessionBanList.push(result.hash);
+  }
+
+  currentOutfit = result;
+  renderOutfitDisplay(result);
+  updateSessionBanCount();
+  updateOutfitCountDisplay();
+}
+
+// ─────────────────────────────────────────────────────────────
+// SESSION BAN MANAGEMENT
+// ─────────────────────────────────────────────────────────────
+
+/** Reset the session ban list (never touches permanent blockedList). */
+function resetSession() {
+  sessionBanList = [];
+  updateSessionBanCount();
+  showToast('Rolls reset — all combinations available again this session.', 'success');
+}
+
+/** Update the displayed session ban count. */
+function updateSessionBanCount() {
+  document.getElementById('session-ban-count').textContent =
+    `${sessionBanList.length} combination${sessionBanList.length === 1 ? '' : 's'} hidden this session`;
+}
+
+// ─────────────────────────────────────────────────────────────
+// OUTFIT COUNT CALCULATOR
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Calculate how many unique outfit combinations the current style can produce
+ * from the active closet, excluding blocked combinations.
+ * Returns { count, formula } where formula is a readable string.
+ */
+function calculateOutfitCount() {
+  const style = getSelectedStyle();
+  if (!style) return { count: 0, formula: '' };
+
+  let total = 1;
+  const parts = [];
+
+  for (const slot of style.slots) {
+    const pool = filterSlot(slot, style.globalExcludeTags || []);
+    if (pool.length === 0 && slot.required) return { count: 0, formula: 'Required slot empty' };
+    if (pool.length > 0) {
+      total *= pool.length;
+      parts.push(`${pool.length} ${slot.type}${pool.length !== 1 ? 's' : ''}`);
+    }
+  }
+
+  const formula = parts.join(' × ');
+  return { count: total, formula };
+}
+
+/** Update the outfit count display in the generator panel. */
+function updateOutfitCountDisplay() {
+  const { count, formula } = calculateOutfitCount();
+  document.getElementById('outfit-count-display').textContent =
+    count > 0 ? count.toLocaleString() : '—';
+  document.getElementById('outfit-count-formula').textContent =
+    formula || 'Select a style to calculate';
+}
+
+// ─────────────────────────────────────────────────────────────
+// OUTFIT ACTIONS — save, block
+// ─────────────────────────────────────────────────────────────
+
+/** Open the save outfit modal with a preview of the current outfit. */
+function saveCurrentOutfit() {
+  if (!currentOutfit) return;
+  document.getElementById('field-outfit-name').value = '';
+
+  // Build preview
+  const preview = currentOutfit.slots.map(s => {
+    if (s.skipped) return `<div style="font-size:0.82rem;color:var(--ink-light);font-style:italic;padding:3px 0;">${s.type}: skipped</div>`;
+    return `<div style="font-size:0.85rem;padding:3px 0;font-family:var(--font-body);">
+      <span style="color:var(--ink-light);font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;margin-right:8px;">${s.type}</span>
+      <strong>${s.piece.name}</strong>
+    </div>`;
+  }).join('');
+  document.getElementById('save-outfit-preview').innerHTML = preview;
+
+  openModal('modal-save-outfit');
+  setTimeout(() => document.getElementById('field-outfit-name').focus(), 100);
+}
+
+/** Confirm and persist the save. Called by the modal Save button. */
+function confirmSaveOutfit() {
+  const name = document.getElementById('field-outfit-name').value.trim();
+  if (!name) { showToast('Please enter an outfit name.', 'warning'); return; }
+  if (!currentOutfit) return;
+
+  // Build the outfit object
+  const outfit = {
+    id: uid(),
+    name,
+    pieces: currentOutfit.pieceIds,
+    baseStyleId: selectedStyleId,
+    saved: true,
+    blocked: false,
+    wornCount: 0,
+    lastWornDate: null,
+    dateCreated: new Date().toISOString()
+  };
+  state.outfits.push(outfit);
+
+  // Increment favoriteCount for each piece in this outfit
+  currentOutfit.slots.forEach(s => {
+    if (s.piece) {
+      const p = state.pieces.find(p => p.id === s.piece.id);
+      if (p) p.favoriteCount = (p.favoriteCount || 0) + 1;
+    }
+  });
+
+  saveState();
+  closeModal('modal-save-outfit');
+  showToast(`"${name}" saved!`, 'success');
+  updateHeaderStats();
+  renderSavedOutfits();
+}
+
+/** Open the block confirmation modal. */
+function blockCurrentOutfit() {
+  if (!currentOutfit) return;
+
+  // Build preview
+  const preview = currentOutfit.slots
+    .filter(s => !s.skipped)
+    .map(s => `<div style="font-size:0.85rem;padding:3px 0;font-family:var(--font-body);">
+      <span style="color:var(--ink-light);font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;margin-right:8px;">${s.type}</span>
+      <strong>${s.piece.name}</strong>
+    </div>`).join('');
+  document.getElementById('block-outfit-preview').innerHTML = preview;
+
+  openModal('modal-block');
+}
+
+/** Permanently block the current outfit combination. */
+function confirmBlock() {
+  if (!currentOutfit) return;
+  const hash = currentOutfit.hash;
+
+  // Add to permanent blocked list
+  if (!state.blockedList.includes(hash)) state.blockedList.push(hash);
+  // Also add to session ban
+  if (!sessionBanList.includes(hash)) sessionBanList.push(hash);
+
+  saveState();
+  closeModal('modal-block');
+  showToast('Combination permanently blocked. Generating a new outfit…', 'success');
+  updateSessionBanCount();
+
+  // Auto-generate a replacement
+  generateOutfit();
+}
+
+/** Delete a saved outfit. */
+function deleteOutfit(outfitId) {
+  if (!confirm('Remove this saved outfit?')) return;
+  state.outfits = state.outfits.filter(o => o.id !== outfitId);
+  saveState();
+  updateHeaderStats();
+  renderSavedOutfits();
+  showToast('Outfit removed.', 'success');
+}
+
+// ─────────────────────────────────────────────────────────────
+// PIECE CRUD
+// ─────────────────────────────────────────────────────────────
+
+/** Open the Add Piece modal (empty form). */
+function openAddPiece() {
+  editingPieceId = null;
+  currentTags = [];
+  document.getElementById('modal-piece-title').textContent = 'Add Piece';
+  document.getElementById('piece-save-btn').textContent = 'Add Piece';
+  document.getElementById('piece-form').reset();
+  document.getElementById('piece-form-error').innerHTML = '';
+  populateTypeSelect('field-type', '');
+  renderTagPills();
+  openModal('modal-piece');
+  setTimeout(() => document.getElementById('field-name').focus(), 100);
+}
+
+/** Open the Edit Piece modal pre-filled with a piece's data. */
+function openEditPiece(pieceId) {
+  const piece = state.pieces.find(p => p.id === pieceId);
+  if (!piece) return;
+  editingPieceId = pieceId;
+  currentTags = [...piece.tags];
+  document.getElementById('modal-piece-title').textContent = 'Edit Piece';
+  document.getElementById('piece-save-btn').textContent = 'Save Changes';
+  document.getElementById('field-name').value = piece.name;
+  populateTypeSelect('field-type', piece.type);
+  document.getElementById('field-qty').value  = piece.quantity;
+  document.getElementById('piece-form-error').innerHTML = '';
+  renderTagPills();
+  openModal('modal-piece');
+}
+
+/** Handle the piece form submission (add or edit). */
+function savePiece(e) {
+  e.preventDefault();
+  const name = document.getElementById('field-name').value.trim();
+  const type = document.getElementById('field-type').value;
+  const qty  = parseInt(document.getElementById('field-qty').value, 10);
+
+  // Validation
+  if (!name) { setPieceError('Name is required.'); return; }
+  if (!type) { setPieceError('Type is required — choose from the dropdown.'); return; }
+  if (!getAllTypes().includes(type)) { setPieceError(`"${type}" is not a recognised type. Add it via Manage Types first.`); return; }
+  if (!qty || qty < 1) { setPieceError('Quantity must be at least 1.'); return; }
+
+  if (editingPieceId) {
+    // Edit existing piece
+    const piece = state.pieces.find(p => p.id === editingPieceId);
+    if (!piece) return;
+    // Remove old tags from registry, add new ones
+    piece.tags.forEach(t => pruneTag(t));
+    piece.name     = name;
+    piece.type     = type;
+    piece.quantity = qty;
+    piece.tags     = [...currentTags];
+    registerTags(currentTags);
+  } else {
+    // Create new piece
+    const piece = {
+      id:            uid(),
+      name,
+      type,
+      quantity:      qty,
+      tags:          [...currentTags],
+      archived:      false,
+      wearCount:     0,
+      favoriteCount: 0,
+      replacedById:  null,
+      dateAdded:     new Date().toISOString()
+    };
+    state.pieces.push(piece);
+    registerTags(currentTags);
+  }
+
+  saveState();
+  closeModal('modal-piece');
+  showToast(editingPieceId ? 'Piece updated.' : 'Piece added!', 'success');
+  editingPieceId = null;
+  renderCloset();
+  updateHeaderStats();
+  updateOutfitCountDisplay();
+}
+
+/** Set error message in the piece form. */
+function setPieceError(msg) {
+  document.getElementById('piece-form-error').innerHTML =
+    `<div class="alert alert-error">${msg}</div>`;
+}
+
+/** Toggle the archived state of a piece (soft delete / restore). */
+function toggleArchive(pieceId) {
+  const piece = state.pieces.find(p => p.id === pieceId);
+  if (!piece) return;
+  piece.archived = !piece.archived;
+  saveState();
+  showToast(piece.archived ? 'Piece archived.' : 'Piece restored to active closet.', 'success');
+  renderCloset();
+  updateOutfitCountDisplay();
+}
+
+/** Permanently delete a piece (with confirmation). */
+function deletePiece(pieceId) {
+  const piece = state.pieces.find(p => p.id === pieceId);
+  if (!piece) return;
+  if (!confirm(`Permanently delete "${piece.name}"? This cannot be undone.`)) return;
+  // Remove from pieces
+  state.pieces = state.pieces.filter(p => p.id !== pieceId);
+  // Remove from any saved outfits (remove that piece ID from the outfit's piece list)
+  state.outfits.forEach(o => {
+    o.pieces = o.pieces.filter(id => id !== pieceId);
+  });
+  // Prune tags
+  piece.tags.forEach(t => pruneTag(t));
+  saveState();
+  showToast('Piece permanently deleted.', 'success');
+  renderCloset();
+  updateHeaderStats();
+}
+
+// ─────────────────────────────────────────────────────────────
+// TAG INPUT UI
+// ─────────────────────────────────────────────────────────────
+
+/** Render the tag pills inside the tag input wrap. */
+function renderTagPills() {
+  const wrap = document.getElementById('tag-input-wrap');
+  // Remove old pills (keep the input field)
+  const field = document.getElementById('tag-field');
+  wrap.querySelectorAll('.tag-pill').forEach(el => el.remove());
+  // Insert pills before the input
+  currentTags.forEach(tag => {
+    const pill = document.createElement('span');
+    pill.className = 'tag-pill';
+    pill.innerHTML = `${tag}<button class="tag-pill-remove" type="button" onclick="removeTag('${tag}')">×</button>`;
+    wrap.insertBefore(pill, field);
+  });
+}
+
+/** Remove a tag from the current editing state. */
+function removeTag(tag) {
+  currentTags = currentTags.filter(t => t !== tag);
+  renderTagPills();
+}
+
+/** Add a tag to the current editing state and update the UI. */
+function addTag(tag) {
+  const clean = tag.trim().toLowerCase().replace(/\s+/g, '-');
+  if (!clean || currentTags.includes(clean)) return;
+  currentTags.push(clean);
+  renderTagPills();
+  document.getElementById('tag-field').value = '';
+  hideSuggestions();
+}
+
+/** Handle keydown events in the tag input field. */
+function onTagKeydown(e) {
+  const val = e.target.value.trim();
+  // Enter or comma adds the tag
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault();
+    if (val) addTag(val);
+  }
+  // Backspace on empty field removes last tag
+  if (e.key === 'Backspace' && !val && currentTags.length > 0) {
+    removeTag(currentTags[currentTags.length - 1]);
+  }
+  // Escape hides suggestions
+  if (e.key === 'Escape') hideSuggestions();
+}
+
+/** Handle input events in the tag field — show autocomplete suggestions. */
+function onTagInput() {
+  const val = document.getElementById('tag-field').value.trim().toLowerCase();
+  if (!val) { hideSuggestions(); return; }
+
+  // Filter registry for matches not already applied
+  const matches = state.tagRegistry.filter(t =>
+    t.includes(val) && !currentTags.includes(t)
+  ).slice(0, 8);
+
+  if (matches.length === 0) { hideSuggestions(); return; }
+
+  const box = document.getElementById('tag-suggestions');
+  box.innerHTML = matches.map(t =>
+    `<div class="tag-suggestion-item" onmousedown="addTag('${t}')">${t}</div>`
+  ).join('');
+  box.style.display = 'block';
+}
+
+/** Hide the tag autocomplete suggestion list. */
+function hideSuggestions() {
+  document.getElementById('tag-suggestions').style.display = 'none';
+}
+
+// ─────────────────────────────────────────────────────────────
+// RENDER — CLOSET VIEW
+// ─────────────────────────────────────────────────────────────
+
+/** Set the active type filter chip and re-render the closet. */
+function setTypeFilter(type, el) {
+  activeTypeFilter = type;
+  document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active');
+  renderCloset();
+}
+
+/** Toggle showing archived pieces. */
+function toggleArchived() {
+  showArchived = !showArchived;
+  document.getElementById('btn-show-archived').textContent =
+    showArchived ? 'Hide Archived' : 'Show Archived';
+  renderCloset();
+}
+
+/** Main closet render — filters pieces and builds the grid. */
+function renderCloset() {
+  const grid  = document.getElementById('piece-grid');
+  const query = document.getElementById('search-input').value.trim().toLowerCase();
+
+  // Filter pieces
+  let pieces = state.pieces.filter(p => {
+    if (!showArchived && p.archived) return false;
+    if (activeTypeFilter !== 'all' && p.type !== activeTypeFilter) return false;
+    if (query) {
+      const hay = `${p.name} ${p.type} ${p.tags.join(' ')}`.toLowerCase();
+      if (!hay.includes(query)) return false;
+    }
+    return true;
+  });
+
+  if (pieces.length === 0) {
+    grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1">
+      <div class="empty-icon">🧥</div>
+      <h3>${state.pieces.length === 0 ? 'Your closet is empty' : 'No pieces match your filters'}</h3>
+      <p>${state.pieces.length === 0
+        ? 'Start building your wardrobe by adding pieces one at a time, or import from a CSV.'
+        : 'Try clearing the search or changing the type filter.'}</p>
+      ${state.pieces.length === 0 ? '<button class="btn btn-primary" onclick="openAddPiece()">+ Add First Piece</button>' : ''}
+    </div>`;
+    return;
+  }
+
+  grid.innerHTML = pieces.map(p => pieceCardHTML(p)).join('');
+}
+
+/** Generate the HTML for a single piece card. */
+function pieceCardHTML(p) {
+  const tagPills = p.tags.map(t =>
+    `<span class="tag-pill">${t}</span>`
+  ).join('');
+
+  const archivedBadge = p.archived ? '<span class="archived-badge">archived</span>' : '';
+
+  return `<div class="piece-card${p.archived ? ' archived' : ''}">
+    ${archivedBadge}
+    <div class="piece-card-type">${p.type}</div>
+    <div class="piece-card-name">${escHtml(p.name)}</div>
+    <div class="piece-card-tags">${tagPills}</div>
+    <div class="piece-card-meta">
+      <span>×${p.quantity}</span>
+      <span>♡ ${p.favoriteCount || 0}</span>
+      <span>👔 ${p.wearCount || 0}</span>
+    </div>
+    <div class="piece-card-actions">
+      <button class="btn btn-sm btn-icon" title="Edit" onclick="openEditPiece('${p.id}')">✏️</button>
+      <button class="btn btn-sm btn-icon" title="${p.archived ? 'Restore' : 'Archive'}" onclick="toggleArchive('${p.id}')">${p.archived ? '↩️' : '📦'}</button>
+      <button class="btn btn-sm btn-icon btn-danger" title="Delete" onclick="deletePiece('${p.id}')">🗑</button>
+    </div>
+  </div>`;
+}
+
+// ─────────────────────────────────────────────────────────────
+// RENDER — GENERATOR VIEW
+// ─────────────────────────────────────────────────────────────
+
+/** Build the style selector radio buttons in the generator panel. */
+function renderStyleSelector() {
+  const el = document.getElementById('style-selector');
+  const styles = getAllStyles();
+
+  el.innerHTML = styles.map(s => {
+    const slotSummary = s.slots.map(sl =>
+      `${sl.required ? '' : '('}${sl.type}${sl.required ? '' : ')'}`
+    ).join(' + ');
+    const sel = s.id === selectedStyleId ? ' selected' : '';
+    return `<label class="style-option${sel}">
+      <input type="radio" name="style" value="${s.id}"
+        ${s.id === selectedStyleId ? 'checked' : ''}
+        onchange="selectStyle('${s.id}')">
+      <div>
+        <div class="style-option-name">${escHtml(s.name)}</div>
+        <div class="style-option-slots">${slotSummary}</div>
+      </div>
+    </label>`;
+  }).join('');
+}
+
+/** Handle style selection change. */
+function selectStyle(styleId) {
+  selectedStyleId = styleId;
+  // Update visual selected state
+  document.querySelectorAll('.style-option').forEach(el => {
+    el.classList.toggle('selected', el.querySelector('input').value === styleId);
+  });
+  updateOutfitCountDisplay();
+}
+
+/** Render the outfit display panel with the current candidate outfit. */
+function renderOutfitDisplay(outfit) {
+  const display  = document.getElementById('outfit-display');
+  const actionsEl = document.getElementById('outfit-actions');
+
+  if (!outfit || outfit.error) {
+    display.innerHTML = `<div class="outfit-placeholder">
+      <div style="font-size:2rem;opacity:0.4;">👔</div>
+      <p>Choose a style and tap Generate to build your first outfit.</p>
+    </div>`;
+    actionsEl.style.display = 'none';
+    return;
+  }
+
+  // Build the slot rows
+  const rows = outfit.slots.map(s => {
+    if (s.skipped) {
+      // Determine skip reason messaging
+      const reasonMsg = s.skipReason === 'all-filtered'
+        ? '⚠ All options excluded by current filters'
+        : s.skipReason === 'conflict-rule'
+        ? '⚠ Excluded by a conflict rule in this style'
+        : '⚠ No pieces in this category yet';
+      return `<div class="outfit-slot">
+        <div class="outfit-slot-type">${s.type}</div>
+        <div class="outfit-slot-piece">
+          <div class="outfit-slot-skipped">Skipped</div>
+          <div class="slot-warning">${reasonMsg}</div>
+        </div>
+      </div>`;
+    }
+    const tagPills = s.piece.tags.slice(0, 4).map(t =>
+      `<span class="tag-pill" style="font-size:0.7rem;">${t}</span>`
+    ).join('');
+    return `<div class="outfit-slot">
+      <div class="outfit-slot-type">${s.type}</div>
+      <div class="outfit-slot-piece">
+        <div class="outfit-slot-piece-name">${escHtml(s.piece.name)}</div>
+        <div class="outfit-slot-piece-tags">${tagPills}</div>
+      </div>
+    </div>`;
+  }).join('');
+
+  display.innerHTML = rows;
+  actionsEl.style.display = 'flex';
+}
+
+// ─────────────────────────────────────────────────────────────
+// RENDER — SAVED OUTFITS VIEW
+// ─────────────────────────────────────────────────────────────
+
+/** Render the saved outfits list. */
+function renderSavedOutfits() {
+  const container = document.getElementById('saved-outfits-list');
+  const saved = state.outfits.filter(o => o.saved && !o.blocked);
+
+  if (saved.length === 0) {
+    container.innerHTML = `<div class="empty-state">
+      <div class="empty-icon">📋</div>
+      <h3>No saved outfits yet</h3>
+      <p>Generate an outfit and save it to see it here.</p>
+    </div>`;
+    return;
+  }
+
+  container.innerHTML = saved.map(o => savedOutfitCardHTML(o)).join('');
+}
+
+/** Generate the HTML for a saved outfit card. */
+function savedOutfitCardHTML(o) {
+  // Resolve piece objects from IDs
+  const pieces = o.pieces
+    .map(id => state.pieces.find(p => p.id === id))
+    .filter(Boolean);
+
+  const pieceRows = pieces.map(p => `
+    <div class="saved-outfit-piece-row">
+      <span class="saved-outfit-piece-type">${p.type}</span>
+      <span>${escHtml(p.name)}</span>
+    </div>`).join('');
+
+  const lastWorn = o.lastWornDate
+    ? `Last worn: ${o.lastWornDate}`
+    : 'Not yet worn';
+
+  return `<div class="saved-outfit-card">
+    <div class="saved-outfit-header">
+      <div class="saved-outfit-name">${escHtml(o.name)}</div>
+      <div class="saved-outfit-meta">
+        <span>👔 worn ${o.wornCount || 0}×</span>
+        <span>${lastWorn}</span>
+      </div>
+    </div>
+    <div class="saved-outfit-pieces">${pieceRows}</div>
+    <div class="saved-outfit-actions">
+      <button class="btn btn-sm btn-primary" onclick="markAsWorn('${o.id}')">Mark as Worn</button>
+      <button class="btn btn-sm btn-danger" onclick="deleteOutfit('${o.id}')">Remove</button>
+    </div>
+  </div>`;
+}
+
+// ─────────────────────────────────────────────────────────────
+// IMPORT — CSV
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Handle CSV file upload. Parses and validates the file.
+ * Expected header row: name, type, quantity (case-insensitive).
+ * Additional columns become tags on the piece.
+ */
+function handleCsvUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const result = parseCsv(ev.target.result);
+    const errEl = document.getElementById('csv-error');
+    if (result.errors.length > 0) {
+      errEl.innerHTML = `<div class="alert alert-error">
+        <strong>Import errors:</strong><br>${result.errors.map(escHtml).join('<br>')}
+      </div>`;
+    } else {
+      errEl.innerHTML = '';
+    }
+    if (result.pieces.length > 0) {
+      // Merge imported pieces (don't overwrite existing)
+      let added = 0;
+      result.pieces.forEach(p => {
+        state.pieces.push(p);
+        registerTags(p.tags);
+        added++;
+      });
+      saveState();
+      renderCloset();
+      updateHeaderStats();
+      updateOutfitCountDisplay();
+      showToast(`Imported ${added} piece${added !== 1 ? 's' : ''} successfully.`, 'success');
+    }
+  };
+  reader.readAsText(file);
+  // Reset input so the same file can be re-uploaded
+  e.target.value = '';
+}
+
+/**
+ * Parse a CSV string into piece objects.
+ * Required columns: name, type, quantity.
+ * Extra columns become tags.
+ * Returns { pieces: [], errors: [] }
+ */
+function parseCsv(text) {
+  const lines  = text.trim().split(/\r?\n/).filter(l => l.trim());
+  const errors = [];
+  const pieces = [];
+
+  if (lines.length < 2) {
+    errors.push('CSV must have a header row and at least one data row.');
+    return { pieces, errors };
+  }
+
+  // Parse header
+  const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
+
+  // Validate required columns exist
+  const requiredCols = ['name', 'type', 'quantity'];
+  const missingCols = requiredCols.filter(c => !headers.includes(c));
+  if (missingCols.length > 0) {
+    errors.push(`Missing required column(s): ${missingCols.join(', ')}. `
+      + `Header must include: name, type, quantity`);
+    return { pieces, errors };
+  }
+
+  const nameIdx = headers.indexOf('name');
+  const typeIdx = headers.indexOf('type');
+  const qtyIdx  = headers.indexOf('quantity');
+
+  // Parse data rows
+  for (let i = 1; i < lines.length; i++) {
+    const rowNum = i + 1;
+    const cols   = parseCsvLine(lines[i]);
+
+    const rawName = (cols[nameIdx] || '').trim();
+    const rawType = (cols[typeIdx] || '').trim().toLowerCase().replace(/\s+/g, '-');
+    const rawQty  = (cols[qtyIdx]  || '').trim();
+
+    // Validate each field — rowErrors collects per-row issues
+    const rowErrors = [];
+    if (!rawName)                             rowErrors.push('name is empty');
+    // Accept any type value — unknown types are auto-registered in typeRegistry
+    if (!rawType)                             rowErrors.push('type is empty');
+    const qty = parseInt(rawQty, 10);
+    if (isNaN(qty) || qty < 1)               rowErrors.push(`quantity "${rawQty}" must be a positive integer`);
+
+    if (rowErrors.length > 0) {
+      errors.push(`Row ${rowNum}: ${rowErrors.join('; ')}`);
+      continue;
+    }
+
+    // Auto-register any new type not already in the registry
+    if (rawType && !getAllTypes().includes(rawType)) {
+      state.typeRegistry.push(rawType);
+      state.typeRegistry.sort();
+    }
+
+    // Any extra columns become tags
+    const extraTags = headers
+      .filter((h, idx) => !requiredCols.includes(h) && cols[idx] && cols[idx].trim())
+      .map((h, idx) => {
+        // Use the cell value as a tag if it looks like a tag, otherwise use the column name
+        const val = (cols[headers.indexOf(h)] || '').trim().toLowerCase();
+        return val;
+      })
+      .filter(Boolean);
+
+    pieces.push({
+      id:            uid(),
+      name:          rawName,
+      type:          rawType,
+      quantity:      qty,
+      tags:          extraTags,
+      archived:      false,
+      wearCount:     0,
+      favoriteCount: 0,
+      replacedById:  null,
+      dateAdded:     new Date().toISOString()
+    });
+  }
+
+  return { pieces, errors };
+}
+
+/**
+ * Parse a single CSV line, handling quoted fields.
+ * @param {string} line
+ * @returns {string[]}
+ */
+function parseCsvLine(line) {
+  const result = [];
+  let current  = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+    } else if (ch === ',' && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += ch;
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+// ─────────────────────────────────────────────────────────────
+// IMPORT — JSON
+// ─────────────────────────────────────────────────────────────
+
+/** Handle JSON backup file upload. Merges into existing state. */
+function handleJsonUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const errEl = document.getElementById('json-error');
+    try {
+      const data = JSON.parse(ev.target.result);
+      let added = 0;
+
+      // Merge pieces by ID (skip existing)
+      if (Array.isArray(data.pieces)) {
+        const existingIds = new Set(state.pieces.map(p => p.id));
+        data.pieces.forEach(p => {
+          if (!existingIds.has(p.id)) {
+            state.pieces.push(p);
+            registerTags(p.tags || []);
+            added++;
+          }
+        });
+      }
+      // Merge outfits
+      if (Array.isArray(data.outfits)) {
+        const existingIds = new Set(state.outfits.map(o => o.id));
+        data.outfits.forEach(o => {
+          if (!existingIds.has(o.id)) state.outfits.push(o);
+        });
+      }
+      // Merge blocked list
+      if (Array.isArray(data.blockedList)) {
+        data.blockedList.forEach(h => {
+          if (!state.blockedList.includes(h)) state.blockedList.push(h);
+        });
+      }
+
+      saveState();
+      renderCloset();
+      updateHeaderStats();
+      updateOutfitCountDisplay();
+      errEl.innerHTML = '';
+      showToast(`Merged ${added} new piece${added !== 1 ? 's' : ''} from backup.`, 'success');
+    } catch(err) {
+      errEl.innerHTML = `<div class="alert alert-error">Invalid JSON file. ${escHtml(err.message)}</div>`;
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+// ─────────────────────────────────────────────────────────────
+// EXPORT — ZIP (CSV + JSON)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Export the wardrobe as a ZIP containing:
+ *   - closet.csv   (all pieces)
+ *   - outfits.csv  (all saved outfits)
+ *   - backup.json  (full state)
+ *
+ * Uses a simple in-memory zip approach (no external library).
+ * Falls back to downloading the two files separately if zip is unavailable.
+ */
+function exportZip() {
+  // Build CSV content for pieces
+  const csvHeader = 'name,type,quantity,tags,wearCount,favoriteCount,archived,dateAdded\n';
+  const csvRows   = state.pieces.map(p =>
+    [
+      csvEsc(p.name),
+      p.type,
+      p.quantity,
+      csvEsc(p.tags.join(';')),
+      p.wearCount || 0,
+      p.favoriteCount || 0,
+      p.archived ? 'true' : 'false',
+      p.dateAdded || ''
+    ].join(',')
+  ).join('\n');
+  const csvContent = csvHeader + csvRows;
+
+  // Build JSON backup
+  const jsonContent = JSON.stringify(state, null, 2);
+
+  // Download both files (ZIP encoding requires a library we can't load;
+  // downloading separately is the reliable path)
+  downloadText('closet.csv',  csvContent, 'text/csv');
+  setTimeout(() => downloadText('backup.json', jsonContent, 'application/json'), 300);
+  showToast('Downloading closet.csv and backup.json…', 'success');
+}
+
+/** Trigger a text file download. */
+function downloadText(filename, content, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href     = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+/** Escape a value for CSV (wrap in quotes if it contains commas or quotes). */
+function csvEsc(val) {
+  const s = String(val || '');
+  return s.includes(',') || s.includes('"') || s.includes('\n')
+    ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+// ─────────────────────────────────────────────────────────────
+// DRAG & DROP on import zones
+// ─────────────────────────────────────────────────────────────
+function setupDropZone(zoneId, inputId, handler) {
+  const zone = document.getElementById(zoneId);
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    // Fake a file input change event
+    handler({ target: { files: [file], value: '' } });
+  });
+}
+
+// ─────────────────────────────────────────────────────────────
+// MODAL HELPERS
+// ─────────────────────────────────────────────────────────────
+
+function openModal(id) {
+  document.getElementById(id).classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeModal(id) {
+  document.getElementById(id).classList.remove('open');
+  document.body.style.overflow = '';
+}
+
+// Close modals on overlay click
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', e => {
+    if (e.target === overlay) closeModal(overlay.id);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────
+// WEAR CURRENT OUTFIT (from generator — may not be saved)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Open the "Log as Worn" modal for the currently displayed generated outfit.
+ * This works whether or not the outfit has been saved.
+ */
+function wearCurrentOutfit() {
+  if (!currentOutfit) return;
+
+  // Build preview
+  const preview = currentOutfit.slots
+    .filter(s => !s.skipped)
+    .map(s => `<div class="history-entry-piece">
+      <span class="history-entry-piece-type">${s.piece.type}</span>
+      <span>${escHtml(s.piece.name)}</span>
+    </div>`).join('');
+  document.getElementById('log-wear-preview').innerHTML = preview;
+  document.getElementById('field-wear-note').value = '';
+
+  openModal('modal-log-wear');
+  setTimeout(() => document.getElementById('field-wear-note').focus(), 100);
+}
+
+/**
+ * Confirm and write the wear log entry for the current generated outfit.
+ * Updates piece.wearCount for every piece in the outfit.
+ */
+function confirmLogWear() {
+  if (!currentOutfit) return;
+  const note = document.getElementById('field-wear-note').value.trim();
+
+  // Update wearCount on each piece
+  const pieceIds = currentOutfit.slots
+    .filter(s => !s.skipped)
+    .map(s => s.piece.id);
+
+  pieceIds.forEach(id => {
+    const p = state.pieces.find(p => p.id === id);
+    if (p) p.wearCount = (p.wearCount || 0) + 1;
+  });
+
+  // Build outfit name from pieces for the log
+  const outfitName = currentOutfit.slots
+    .filter(s => !s.skipped)
+    .map(s => s.piece.name)
+    .join(', ');
+
+  // Write wear history entry
+  const entry = {
+    id:         uid(),
+    date:       new Date().toISOString().slice(0, 10), // YYYY-MM-DD
+    outfitId:   null,          // Not a saved outfit — generated ad-hoc
+    outfitName: outfitName,
+    pieceIds,
+    note:       note || null,
+  };
+  state.wearHistory.push(entry);
+
+  saveState();
+  closeModal('modal-log-wear');
+  showToast('Outfit logged as worn!', 'success');
+  renderCloset(); // Refresh wear counts on piece cards
+}
+
+// ─────────────────────────────────────────────────────────────
+// WEAR HISTORY RENDER
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Render the Wear History view.
+ * Groups entries by date (most recent first), shows outfit name,
+ * pieces, and an editable note field per entry.
+ */
+function renderWearHistory() {
+  const container = document.getElementById('wear-history-list');
+
+  if (state.wearHistory.length === 0) {
+    container.innerHTML = `<div class="empty-state">
+      <div class="empty-icon">📅</div>
+      <h3>No wear history yet</h3>
+      <p>Mark outfits as worn from the Generator or Saved Outfits tab to start tracking here.</p>
+    </div>`;
+    return;
+  }
+
+  // Sort entries newest first
+  const sorted = [...state.wearHistory].sort((a, b) => b.date.localeCompare(a.date));
+
+  // Group by date
+  const byDate = {};
+  sorted.forEach(entry => {
+    if (!byDate[entry.date]) byDate[entry.date] = [];
+    byDate[entry.date].push(entry);
+  });
+
+  container.innerHTML = Object.entries(byDate).map(([date, entries]) => {
+    const displayDate = formatHistoryDate(date);
+    const entriesHtml = entries.map(e => historyEntryHTML(e)).join('');
+    return `<div class="history-day">
+      <div class="history-day-header">
+        <div class="history-day-date">${displayDate}</div>
+        <div class="history-day-count">${entries.length} outfit${entries.length !== 1 ? 's' : ''} worn</div>
+      </div>
+      ${entriesHtml}
+    </div>`;
+  }).join('');
+}
+
+/**
+ * Generate HTML for a single wear history entry.
+ * @param {object} entry
+ * @returns {string}
+ */
+function historyEntryHTML(entry) {
+  // Resolve piece objects
+  const pieces = entry.pieceIds
+    .map(id => state.pieces.find(p => p.id === id))
+    .filter(Boolean);
+
+  const pieceRows = pieces.map(p => `
+    <div class="history-entry-piece">
+      <span class="history-entry-piece-type">${p.type}</span>
+      <span>${escHtml(p.name)}</span>
+    </div>`).join('');
+
+  const noteSection = entry.note
+    ? `<div class="history-note">📝 ${escHtml(entry.note)}</div>`
+    : `<div style="margin-top:8px;">
+        <textarea class="history-note-input" rows="2"
+          placeholder="Add a note about this day…"
+          onblur="saveHistoryNote('${entry.id}', this.value)"
+        ></textarea>
+       </div>`;
+
+  return `<div class="history-entry">
+    <div class="history-entry-header">
+      <div class="history-entry-name">${escHtml(entry.outfitName)}</div>
+      <button class="btn btn-sm btn-danger" onclick="deleteHistoryEntry('${entry.id}')">Remove</button>
+    </div>
+    <div class="history-entry-pieces">${pieceRows}</div>
+    ${noteSection}
+  </div>`;
+}
+
+/**
+ * Save a note on a wear history entry (called on blur of the note textarea).
+ * @param {string} entryId
+ * @param {string} note
+ */
+function saveHistoryNote(entryId, note) {
+  const entry = state.wearHistory.find(e => e.id === entryId);
+  if (!entry) return;
+  const trimmed = note.trim();
+  if (!trimmed) return;
+  entry.note = trimmed;
+  saveState();
+  renderWearHistory(); // Re-render so the textarea becomes a display note
+  showToast('Note saved.', 'success');
+}
+
+/**
+ * Remove a wear history entry.
+ * @param {string} entryId
+ */
+function deleteHistoryEntry(entryId) {
+  if (!confirm('Remove this wear history entry?')) return;
+  state.wearHistory = state.wearHistory.filter(e => e.id !== entryId);
+  saveState();
+  renderWearHistory();
+  showToast('Entry removed.', 'success');
+}
+
+/**
+ * Format a YYYY-MM-DD date string for display.
+ * @param {string} dateStr
+ * @returns {string}
+ */
+function formatHistoryDate(dateStr) {
+  const d = new Date(dateStr + 'T12:00:00'); // Noon to avoid timezone shifts
+  const today = new Date().toISOString().slice(0, 10);
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  if (dateStr === today) return 'Today';
+  if (dateStr === yesterday) return 'Yesterday';
+  return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
+}
+
+// ─────────────────────────────────────────────────────────────
+// WEAR FROM SAVED OUTFITS — updated markAsWorn to also log history
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Mark a saved outfit as worn.
+ * Updates outfit.wornCount, outfit.lastWornDate, piece.wearCount,
+ * and writes a wear history entry.
+ * Replaces the previous markAsWorn function.
+ * @param {string} outfitId
+ */
+function markAsWorn(outfitId) {
+  const outfit = state.outfits.find(o => o.id === outfitId);
+  if (!outfit) return;
+
+  // Prompt for optional note via a simple prompt (can be a modal in a future rev)
+  const note = window.prompt('Add a note for today (optional):', '') || null;
+
+  // Increment outfit counters
+  outfit.wornCount = (outfit.wornCount || 0) + 1;
+  outfit.lastWornDate = new Date().toISOString().slice(0, 10);
+
+  // Increment wearCount on each piece
+  outfit.pieces.forEach(pieceId => {
+    const p = state.pieces.find(p => p.id === pieceId);
+    if (p) p.wearCount = (p.wearCount || 0) + 1;
+  });
+
+  // Write wear history entry
+  const entry = {
+    id:         uid(),
+    date:       new Date().toISOString().slice(0, 10),
+    outfitId:   outfitId,
+    outfitName: outfit.name,
+    pieceIds:   [...outfit.pieces],
+    note:       note ? note.trim() : null,
+  };
+  state.wearHistory.push(entry);
+
+  saveState();
+  showToast('Outfit marked as worn!', 'success');
+  renderSavedOutfits();
+  renderCloset();
+}
+
+// ─────────────────────────────────────────────────────────────
+// TYPE REGISTRY — infinite user-defined types
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Built-in default types that always exist.
+ * Users can add more via the type manager but cannot delete these.
+ */
+const BUILTIN_TYPES = ['top','bottom','shoes','jacket','accessory','other'];
+
+/**
+ * Get the full merged type list: built-ins + user-added, sorted.
+ * @returns {string[]}
+ */
+function getAllTypes() {
+  const merged = [...new Set([...BUILTIN_TYPES, ...state.typeRegistry])];
+  return merged.sort();
+}
+
+/**
+ * Populate a <select> element with all current types.
+ * @param {string} selectId
+ * @param {string} [selectedValue]
+ */
+function populateTypeSelect(selectId, selectedValue = '') {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  const types = getAllTypes();
+  sel.innerHTML = '<option value="">— select —</option>'
+    + types.map(t => `<option value="${t}" ${t === selectedValue ? 'selected' : ''}>${t.charAt(0).toUpperCase() + t.slice(1)}</option>`).join('');
+}
+
+/**
+ * Open the Manage Types modal.
+ */
+function openManageTypes() {
+  renderTypeList();
+  document.getElementById('field-new-type').value = '';
+  document.getElementById('type-error').innerHTML = '';
+  openModal('modal-types');
+}
+
+/**
+ * Render the type chip list in the Manage Types modal.
+ */
+function renderTypeList() {
+  const container = document.getElementById('type-list');
+  const all = getAllTypes();
+  container.innerHTML = `<div class="type-chip-list">
+    ${all.map(t => {
+      const isBuiltin = BUILTIN_TYPES.includes(t);
+      const count = state.pieces.filter(p => p.type === t).length;
+      return `<span class="type-chip${isBuiltin ? ' builtin' : ''}">
+        ${t}${count > 0 ? ` <span style="font-size:0.68rem;color:var(--ink-light);">(${count})</span>` : ''}
+        ${isBuiltin
+          ? '<span style="font-size:0.68rem;color:var(--border);margin-left:2px;">built-in</span>'
+          : `<button class="type-chip-remove" onclick="removeCustomType('${t}')" title="Remove type">×</button>`
+        }
+      </span>`;
+    }).join('')}
+  </div>`;
+}
+
+/**
+ * Add a new custom type from the modal input.
+ */
+function addCustomType() {
+  const val = document.getElementById('field-new-type').value.trim().toLowerCase().replace(/\s+/g, '-');
+  const errEl = document.getElementById('type-error');
+  if (!val) { errEl.innerHTML = '<div class="alert alert-error">Enter a type name.</div>'; return; }
+  if (getAllTypes().includes(val)) { errEl.innerHTML = '<div class="alert alert-error">That type already exists.</div>'; return; }
+  state.typeRegistry.push(val);
+  state.typeRegistry.sort();
+  saveState();
+  document.getElementById('field-new-type').value = '';
+  errEl.innerHTML = '';
+  renderTypeList();
+  showToast(`Type "${val}" added.`, 'success');
+}
+
+/**
+ * Remove a user-added custom type (only if no pieces use it).
+ * @param {string} type
+ */
+function removeCustomType(type) {
+  const inUse = state.pieces.some(p => p.type === type);
+  if (inUse) {
+    showToast(`Cannot remove "${type}" — pieces are using it. Re-type those pieces first.`, 'error');
+    return;
+  }
+  state.typeRegistry = state.typeRegistry.filter(t => t !== type);
+  saveState();
+  renderTypeList();
+  showToast(`Type "${type}" removed.`, 'success');
+}
+
+// ─────────────────────────────────────────────────────────────
+// IMPACT PREVIEW
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Calculate the wardrobe impact of removing a piece.
+ * Returns stats and affected outfit/style info without modifying state.
+ * @param {string} pieceId
+ * @returns {object} { pieceName, affectedSavedOutfits, outfitCountBefore, outfitCountAfter, affectedStyles }
+ */
+function calculateImpact(pieceId) {
+  const piece = state.pieces.find(p => p.id === pieceId);
+  if (!piece) return null;
+
+  // Saved outfits that include this piece
+  const affectedSavedOutfits = state.outfits.filter(o => o.saved && o.pieces.includes(pieceId));
+
+  // Outfit count before and after for each style
+  const styleImpacts = getAllStyles().map(style => {
+    const before = computeStyleCount(style, []);
+    const after  = computeStyleCount(style, [pieceId]);
+    return { styleName: style.name, before, after, delta: before - after };
+  }).filter(s => s.delta > 0);
+
+  const totalBefore = styleImpacts.reduce((sum, s) => sum + s.before, 0);
+  const totalAfter  = styleImpacts.reduce((sum, s) => sum + s.after,  0);
+
+  return { piece, affectedSavedOutfits, styleImpacts, totalBefore, totalAfter };
+}
+
+/**
+ * Compute the generatable outfit count for a style, optionally excluding certain piece IDs.
+ * @param {object} style
+ * @param {string[]} excludeIds  Piece IDs to treat as if archived
+ * @returns {number}
+ */
+function computeStyleCount(style, excludeIds = []) {
+  let total = 1;
+  for (const slot of style.slots) {
+    const pool = activePieces()
+      .filter(p => !excludeIds.includes(p.id))
+      .filter(p => {
+        if (p.type !== slot.type) return false;
+        if (slot.requiredTags.some(t => !p.tags.includes(t))) return false;
+        if (slot.excludedTags.some(t =>  p.tags.includes(t))) return false;
+        if ((style.globalExcludeTags || []).some(t => p.tags.includes(t))) return false;
+        return true;
+      });
+    if (pool.length === 0 && slot.required) return 0;
+    if (pool.length > 0) total *= pool.length;
+  }
+  return total;
+}
+
+/**
+ * Open the impact preview modal for a piece before archiving or swapping.
+ * @param {string} pieceId
+ * @param {'archive'|'swap'} action  What we'll do if confirmed
+ */
+function openImpactPreview(pieceId, action) {
+  const impact = calculateImpact(pieceId);
+  if (!impact) return;
+
+  const { piece, affectedSavedOutfits, styleImpacts, totalBefore, totalAfter } = impact;
+
+  document.getElementById('modal-impact-title').textContent =
+    action === 'swap' ? `Swap Impact — ${piece.name}` : `Archive Impact — ${piece.name}`;
+
+  const statsHtml = `<div class="impact-stat-row">
+    <div class="impact-stat ${affectedSavedOutfits.length > 0 ? 'warn' : 'good'}">
+      <div class="impact-stat-number">${affectedSavedOutfits.length}</div>
+      <div class="impact-stat-label">Saved outfits affected</div>
+    </div>
+    <div class="impact-stat ${totalBefore - totalAfter > 0 ? 'warn' : 'good'}">
+      <div class="impact-stat-number">${(totalBefore - totalAfter).toLocaleString()}</div>
+      <div class="impact-stat-label">Combinations lost</div>
+    </div>
+    <div class="impact-stat">
+      <div class="impact-stat-number" style="color:var(--sage-dark);">${totalAfter.toLocaleString()}</div>
+      <div class="impact-stat-label">Combinations remaining</div>
+    </div>
+  </div>`;
+
+  const savedList = affectedSavedOutfits.length > 0
+    ? `<div style="font-size:0.78rem;font-weight:600;color:var(--ink-light);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.05em;">Affected saved outfits</div>
+      <div class="impact-affected-list">
+        ${affectedSavedOutfits.map(o =>
+          `<div class="impact-affected-item">${escHtml(o.name)}</div>`).join('')}
+      </div>` : '';
+
+  const styleList = styleImpacts.length > 0
+    ? `<div style="font-size:0.78rem;font-weight:600;color:var(--ink-light);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.05em;">Style impact</div>
+      <div class="impact-affected-list">
+        ${styleImpacts.map(s =>
+          `<div class="impact-affected-item">${escHtml(s.styleName)}: ${s.before.toLocaleString()} → ${s.after.toLocaleString()} combos</div>`
+        ).join('')}
+      </div>` : '';
+
+  document.getElementById('impact-content').innerHTML = statsHtml + savedList + styleList;
+
+  // Footer buttons depend on action
+  const footerEl = document.getElementById('impact-footer');
+  if (action === 'archive') {
+    footerEl.innerHTML = `
+      <button class="btn" onclick="closeModal('modal-impact')">Cancel</button>
+      <button class="btn" style="background:var(--amber-bg);border-color:var(--amber);color:var(--amber);"
+        onclick="closeModal('modal-impact');openSwapModal('${pieceId}')">Swap Instead</button>
+      <button class="btn btn-danger" onclick="closeModal('modal-impact');toggleArchive('${pieceId}')">Archive Anyway</button>`;
+  } else {
+    footerEl.innerHTML = `
+      <button class="btn" onclick="closeModal('modal-impact')">Cancel</button>
+      <button class="btn btn-primary" onclick="closeModal('modal-impact');openSwapModal('${pieceId}')">Continue to Swap</button>`;
+  }
+
+  openModal('modal-impact');
+}
+
+// ─────────────────────────────────────────────────────────────
+// SWAP / UPGRADE FLOW
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Open the Swap/Upgrade modal for a given piece.
+ * Shows only pieces of the same type as replacement candidates.
+ * @param {string} pieceId
+ */
+function openSwapModal(pieceId) {
+  const piece = state.pieces.find(p => p.id === pieceId);
+  if (!piece) return;
+  swappingPieceId = pieceId;
+
+  // Info block about the piece being replaced
+  document.getElementById('swap-old-piece-info').innerHTML = `
+    <div style="padding:10px 14px;background:var(--terracotta-bg);border:1px solid var(--terracotta);border-radius:var(--radius);">
+      <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--terracotta);margin-bottom:2px;">Replacing</div>
+      <div style="font-family:var(--font-display);font-size:1rem;font-weight:600;color:var(--ink);">${escHtml(piece.name)}</div>
+      <div style="font-size:0.78rem;color:var(--ink-light);">${piece.type} · worn ${piece.wearCount || 0}× · in ${state.outfits.filter(o=>o.pieces.includes(pieceId)).length} outfits</div>
+    </div>`;
+
+  // Populate replacement dropdown — same type, not archived, not this piece
+  const candidates = state.pieces.filter(p => p.type === piece.type && p.id !== pieceId && !p.archived);
+  const sel = document.getElementById('swap-replacement-select');
+  sel.innerHTML = '<option value="">— choose replacement piece —</option>'
+    + candidates.map(p => `<option value="${p.id}">${escHtml(p.name)}${p.tags.length ? ' — ' + p.tags.slice(0,3).join(', ') : ''}</option>`).join('');
+
+  // Reset the "create new" toggle
+  document.getElementById('swap-create-new').checked = false;
+  document.getElementById('swap-new-piece-form').style.display = 'none';
+  document.getElementById('swap-new-name').value = '';
+  document.getElementById('swap-new-qty').value = '1';
+  document.getElementById('swap-new-tags').value = '';
+  document.getElementById('swap-error').innerHTML = '';
+
+  openModal('modal-swap');
+}
+
+/**
+ * Toggle visibility of the "create new piece" sub-form in the swap modal.
+ */
+function toggleSwapCreateNew() {
+  const checked = document.getElementById('swap-create-new').checked;
+  document.getElementById('swap-new-piece-form').style.display = checked ? 'block' : 'none';
+  document.getElementById('swap-replacement-select').disabled = checked;
+}
+
+/**
+ * Execute the swap: archive old piece, set replacedById, update all saved outfits.
+ */
+function confirmSwap() {
+  const oldPiece = state.pieces.find(p => p.id === swappingPieceId);
+  if (!oldPiece) return;
+  const errEl = document.getElementById('swap-error');
+  const createNew = document.getElementById('swap-create-new').checked;
+
+  let newPieceId;
+
+  if (createNew) {
+    // Create the new piece from the sub-form
+    const name = document.getElementById('swap-new-name').value.trim();
+    const qty  = parseInt(document.getElementById('swap-new-qty').value, 10);
+    const tags = document.getElementById('swap-new-tags').value
+      .split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
+
+    if (!name) { errEl.innerHTML = '<div class="alert alert-error">New piece name is required.</div>'; return; }
+    if (!qty || qty < 1) { errEl.innerHTML = '<div class="alert alert-error">Quantity must be at least 1.</div>'; return; }
+
+    const newPiece = {
+      id:            uid(),
+      name,
+      type:          oldPiece.type, // Same type as the piece being replaced
+      quantity:      qty,
+      tags,
+      archived:      false,
+      wearCount:     0,
+      favoriteCount: 0,
+      replacedById:  null,
+      dateAdded:     new Date().toISOString(),
+    };
+    state.pieces.push(newPiece);
+    registerTags(tags);
+    newPieceId = newPiece.id;
+  } else {
+    newPieceId = document.getElementById('swap-replacement-select').value;
+    if (!newPieceId) { errEl.innerHTML = '<div class="alert alert-error">Select a replacement piece, or check "create new".</div>'; return; }
+  }
+
+  // Archive the old piece and record what replaced it
+  oldPiece.archived = true;
+  oldPiece.replacedById = newPieceId;
+
+  // Update all saved outfits: replace old piece ID with new piece ID
+  let outfitsUpdated = 0;
+  state.outfits.forEach(o => {
+    const idx = o.pieces.indexOf(swappingPieceId);
+    if (idx > -1) {
+      o.pieces[idx] = newPieceId;
+      outfitsUpdated++;
+    }
+  });
+
+  // Transfer favoriteCount to the new piece (wear history stays on old piece)
+  const newPiece = state.pieces.find(p => p.id === newPieceId);
+  if (newPiece) newPiece.favoriteCount = (newPiece.favoriteCount || 0) + (oldPiece.favoriteCount || 0);
+
+  saveState();
+  closeModal('modal-swap');
+  showToast(`Swap complete. ${outfitsUpdated} saved outfit${outfitsUpdated !== 1 ? 's' : ''} updated.`, 'success');
+  renderCloset();
+  renderSavedOutfits();
+  updateHeaderStats();
+  updateOutfitCountDisplay();
+  swappingPieceId = null;
+}
+
+// ─────────────────────────────────────────────────────────────
+// CONFLICT RULES — slot-level tag exclusions based on selections
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * State for conflict rules in the style builder.
+ * Each rule: { ifSlotIndex: number, ifTag: string, thenExcludeFromSlotIndex: number, thenExcludeTag: string }
+ * Meaning: if slot[ifSlotIndex] selected a piece with ifTag,
+ *          then exclude pieces with thenExcludeTag from slot[thenExcludeFromSlotIndex].
+ *
+ * Note: These are stored on the style object as style.conflictRules[].
+ * The generator applies them in Block D after each piece is picked.
+ */
+let editingConflictRules = []; // conflict rules for the style currently being built
+
+/**
+ * Add a blank conflict rule to the current style being edited.
+ */
+function addConflictRule() {
+  if (editingStyleSlots.length < 2) {
+    showToast('Add at least 2 slots before creating a conflict rule.', 'warning');
+    return;
+  }
+  editingConflictRules.push({ ifSlotIndex: 0, ifTag: '', thenSlotIndex: 1, thenExcludeTag: '' });
+  renderConflictRules();
+}
+
+/**
+ * Remove a conflict rule by index.
+ * @param {number} index
+ */
+function removeConflictRule(index) {
+  editingConflictRules.splice(index, 1);
+  renderConflictRules();
+}
+
+/**
+ * Render the conflict rules section in the style builder modal.
+ */
+function renderConflictRules() {
+  let container = document.getElementById('conflict-rules-container');
+  if (!container) return;
+  if (editingConflictRules.length === 0) {
+    container.innerHTML = '<div style="font-size:0.78rem;color:var(--ink-light);font-family:var(--font-body);padding:4px 0;">No conflict rules. Add one to prevent tag combinations across slots.</div>';
+    return;
+  }
+  const slotLabels = editingStyleSlots.map((s, i) => `Slot ${i+1} (${s.type})`);
+  container.innerHTML = `<div class="conflict-rule-list">
+    ${editingConflictRules.map((rule, i) => `
+      <div class="conflict-rule-row">
+        <span>If <select onchange="editingConflictRules[${i}].ifSlotIndex=+this.value;renderConflictRules()">
+          ${slotLabels.map((l,idx) => `<option value="${idx}" ${rule.ifSlotIndex===idx?'selected':''}>${l}</option>`).join('')}
+        </select>
+        picks tag <input type="text" value="${escHtml(rule.ifTag)}" placeholder="tag…"
+          onchange="editingConflictRules[${i}].ifTag=this.value.trim().toLowerCase()"
+          style="border:1px solid var(--border);border-radius:4px;padding:2px 6px;font-size:0.8rem;width:90px;">
+        → exclude tag <input type="text" value="${escHtml(rule.thenExcludeTag)}" placeholder="tag…"
+          onchange="editingConflictRules[${i}].thenExcludeTag=this.value.trim().toLowerCase()"
+          style="border:1px solid var(--border);border-radius:4px;padding:2px 6px;font-size:0.8rem;width:90px;">
+        from <select onchange="editingConflictRules[${i}].thenSlotIndex=+this.value;renderConflictRules()">
+          ${slotLabels.map((l,idx) => `<option value="${idx}" ${rule.thenSlotIndex===idx?'selected':''}>${l}</option>`).join('')}
+        </select></span>
+        <button class="btn btn-sm btn-danger btn-icon" onclick="removeConflictRule(${i})">✕</button>
+      </div>`).join('')}
+  </div>`;
+}
+
+// ─────────────────────────────────────────────────────────────
+// CUSTOM STYLE BUILDER — update to include conflict rules section
+// ─────────────────────────────────────────────────────────────
+// (The openAddStyle and saveCustomStyle functions below replace
+//  the ones added in the previous session, adding conflict rule support)
+// ─────────────────────────────────────────────────────────────
+
+
+
+// State for the style builder modal
+let editingStyleSlots = [];         // Array of slot objects being built
+let editingStyleId    = null;       // null = new style, string = editing existing
+let styleGlobalExcludeTags = [];    // Global exclude tags for the style being built
+
+/**
+ * Open the Add Custom Style modal with a blank form.
+ */
+function openAddStyle() {
+  editingStyleId = null;
+  editingStyleSlots = [
+    { type: 'top',    required: true,  requiredTags: [], excludedTags: [], count: 1 },
+    { type: 'bottom', required: true,  requiredTags: [], excludedTags: [], count: 1 },
+  ];
+  styleGlobalExcludeTags = [];
+  editingConflictRules = [];
+  document.getElementById('modal-style-title').textContent = 'Add Custom Style';
+  document.getElementById('field-style-name').value = '';
+  document.getElementById('style-form-error').innerHTML = '';
+  renderSlotBuilder();
+  renderStyleGlobalExcludePills();
+  renderConflictRules();
+  openModal('modal-style');
+  setTimeout(() => document.getElementById('field-style-name').focus(), 100);
+}
+
+/**
+ * Add a new blank slot row to the style builder.
+ */
+function addSlotRow() {
+  // Get all known types from the closet + defaults
+  const knownTypes = [...new Set([
+    ...PIECE_TYPES,
+    ...state.pieces.map(p => p.type)
+  ])];
+  editingStyleSlots.push({
+    type: knownTypes[0] || 'top',
+    required: false,
+    requiredTags: [],
+    excludedTags: [],
+    count: 1
+  });
+  renderSlotBuilder();
+}
+
+/**
+ * Remove a slot row from the style builder.
+ * @param {number} index
+ */
+function removeSlotRow(index) {
+  editingStyleSlots.splice(index, 1);
+  renderSlotBuilder();
+}
+
+/**
+ * Render all slot rows in the style builder modal.
+ * Each row lets the user pick a type, toggle required, and set include/exclude tags.
+ */
+function renderSlotBuilder() {
+  const container = document.getElementById('slot-builder');
+  // Get all known types
+  const knownTypes = [...new Set([
+    ...PIECE_TYPES,
+    ...state.pieces.map(p => p.type)
+  ])].sort();
+
+  container.innerHTML = editingStyleSlots.map((slot, i) => {
+    const typeOptions = knownTypes.map(t =>
+      `<option value="${t}" ${slot.type === t ? 'selected' : ''}>${t}</option>`
+    ).join('');
+
+    const reqPills = slot.requiredTags.map(t =>
+      `<span class="tag-pill" style="font-size:0.7rem;">${escHtml(t)}
+        <button class="tag-pill-remove" type="button" onclick="removeSlotTag(${i},'required','${t}')">×</button>
+      </span>`).join('');
+
+    const exclPills = slot.excludedTags.map(t =>
+      `<span class="tag-pill" style="font-size:0.7rem;background:var(--terracotta-bg);border-color:var(--terracotta);color:var(--terracotta);">${escHtml(t)}
+        <button class="tag-pill-remove" type="button" onclick="removeSlotTag(${i},'excluded','${t}')">×</button>
+      </span>`).join('');
+
+    return `<div class="slot-row">
+      <div>
+        <div class="slot-row-label">Type</div>
+        <select class="form-control" style="font-size:0.82rem;" onchange="updateSlotType(${i}, this.value)">
+          ${typeOptions}
+        </select>
+      </div>
+      <div>
+        <div class="slot-row-label">Required?</div>
+        <label class="slot-required-toggle">
+          <input type="checkbox" ${slot.required ? 'checked' : ''} onchange="updateSlotRequired(${i}, this.checked)">
+          <span>${slot.required ? 'Required' : 'Optional'}</span>
+        </label>
+      </div>
+      <div style="grid-column:1/-2;margin-top:6px;">
+        <div class="slot-row-label" style="color:var(--sage-dark);">Must have tags</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
+          ${reqPills}
+          <input style="border:none;outline:none;font-family:var(--font-body);font-size:0.8rem;background:transparent;min-width:80px;"
+            placeholder="+ tag, Enter"
+            onkeydown="onSlotTagKeydown(event,${i},'required')">
+        </div>
+      </div>
+      <div style="grid-column:1/-2;margin-top:4px;">
+        <div class="slot-row-label" style="color:var(--terracotta);">Exclude tags</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
+          ${exclPills}
+          <input style="border:none;outline:none;font-family:var(--font-body);font-size:0.8rem;background:transparent;min-width:80px;"
+            placeholder="+ tag, Enter"
+            onkeydown="onSlotTagKeydown(event,${i},'excluded')">
+        </div>
+      </div>
+      <div style="align-self:start;padding-top:20px;">
+        <button type="button" class="btn btn-sm btn-danger btn-icon" onclick="removeSlotRow(${i})" title="Remove slot">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+/**
+ * Update a slot's type field.
+ * @param {number} index
+ * @param {string} type
+ */
+function updateSlotType(index, type) {
+  editingStyleSlots[index].type = type;
+}
+
+/**
+ * Update a slot's required flag.
+ * @param {number} index
+ * @param {boolean} required
+ */
+function updateSlotRequired(index, required) {
+  editingStyleSlots[index].required = required;
+  renderSlotBuilder(); // Re-render to update label text
+}
+
+/**
+ * Handle keydown in a slot tag input (required or excluded tags).
+ * @param {KeyboardEvent} e
+ * @param {number} slotIndex
+ * @param {'required'|'excluded'} tagType
+ */
+function onSlotTagKeydown(e, slotIndex, tagType) {
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault();
+    const val = e.target.value.trim().toLowerCase().replace(/\s+/g, '-');
+    if (!val) return;
+    const arr = tagType === 'required'
+      ? editingStyleSlots[slotIndex].requiredTags
+      : editingStyleSlots[slotIndex].excludedTags;
+    if (!arr.includes(val)) arr.push(val);
+    e.target.value = '';
+    renderSlotBuilder();
+  }
+}
+
+/**
+ * Remove a tag from a slot's required or excluded tag list.
+ * @param {number} slotIndex
+ * @param {'required'|'excluded'} tagType
+ * @param {string} tag
+ */
+function removeSlotTag(slotIndex, tagType, tag) {
+  const arr = tagType === 'required'
+    ? editingStyleSlots[slotIndex].requiredTags
+    : editingStyleSlots[slotIndex].excludedTags;
+  const idx = arr.indexOf(tag);
+  if (idx > -1) arr.splice(idx, 1);
+  renderSlotBuilder();
+}
+
+// ── Global exclude tags for the style builder ──────────────
+
+function onStyleGlobalTagInput() {
+  const val = document.getElementById('style-global-exclude-field').value.trim().toLowerCase();
+  if (!val) { document.getElementById('style-global-tag-suggestions').style.display = 'none'; return; }
+  const matches = state.tagRegistry.filter(t => t.includes(val) && !styleGlobalExcludeTags.includes(t)).slice(0, 8);
+  const box = document.getElementById('style-global-tag-suggestions');
+  if (matches.length === 0) { box.style.display = 'none'; return; }
+  box.innerHTML = matches.map(t => `<div class="tag-suggestion-item" onmousedown="addStyleGlobalTag('${t}')">${t}</div>`).join('');
+  box.style.display = 'block';
+}
+
+function onStyleGlobalTagKeydown(e) {
+  const val = e.target.value.trim().toLowerCase().replace(/\s+/g, '-');
+  if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); if (val) addStyleGlobalTag(val); }
+  if (e.key === 'Backspace' && !val && styleGlobalExcludeTags.length > 0) {
+    styleGlobalExcludeTags.pop(); renderStyleGlobalExcludePills();
+  }
+  if (e.key === 'Escape') document.getElementById('style-global-tag-suggestions').style.display = 'none';
+}
+
+function addStyleGlobalTag(tag) {
+  const clean = tag.trim().toLowerCase().replace(/\s+/g, '-');
+  if (!clean || styleGlobalExcludeTags.includes(clean)) return;
+  styleGlobalExcludeTags.push(clean);
+  renderStyleGlobalExcludePills();
+  document.getElementById('style-global-exclude-field').value = '';
+  document.getElementById('style-global-tag-suggestions').style.display = 'none';
+}
+
+function renderStyleGlobalExcludePills() {
+  const wrap  = document.getElementById('style-global-exclude-wrap');
+  const field = document.getElementById('style-global-exclude-field');
+  wrap.querySelectorAll('.tag-pill').forEach(el => el.remove());
+  styleGlobalExcludeTags.forEach(tag => {
+    const pill = document.createElement('span');
+    pill.className = 'tag-pill';
+    pill.style.cssText = 'background:var(--terracotta-bg);border-color:var(--terracotta);color:var(--terracotta);';
+    pill.innerHTML = `${tag}<button class="tag-pill-remove" type="button" onclick="removeStyleGlobalTag('${tag}')">×</button>`;
+    wrap.insertBefore(pill, field);
+  });
+}
+
+function removeStyleGlobalTag(tag) {
+  styleGlobalExcludeTags = styleGlobalExcludeTags.filter(t => t !== tag);
+  renderStyleGlobalExcludePills();
+}
+
+/**
+ * Validate and save the custom style from the builder modal.
+ */
+function saveCustomStyle() {
+  const name = document.getElementById('field-style-name').value.trim();
+  const errEl = document.getElementById('style-form-error');
+
+  if (!name) { errEl.innerHTML = '<div class="alert alert-error">Style name is required.</div>'; return; }
+  if (editingStyleSlots.length === 0) { errEl.innerHTML = '<div class="alert alert-error">Add at least one slot.</div>'; return; }
+  if (!editingStyleSlots.some(s => s.required)) {
+    errEl.innerHTML = '<div class="alert alert-error">At least one slot must be marked as required.</div>'; return;
+  }
+
+  // Validate conflict rules — both tags must be filled in
+  const badRule = editingConflictRules.find(r => !r.ifTag || !r.thenExcludeTag);
+  if (badRule) {
+    errEl.innerHTML = '<div class="alert alert-error">All conflict rules must have both tags filled in.</div>'; return;
+  }
+
+  const style = {
+    id:                editingStyleId || uid(),
+    name,
+    isDefault:         false,
+    slots:             editingStyleSlots.map(s => ({ ...s, requiredTags: [...s.requiredTags], excludedTags: [...s.excludedTags] })),
+    globalExcludeTags: [...styleGlobalExcludeTags],
+    conflictRules:     editingConflictRules.map(r => ({ ...r })),
+  };
+
+  if (editingStyleId) {
+    const idx = state.styles.findIndex(s => s.id === editingStyleId);
+    if (idx > -1) state.styles[idx] = style;
+  } else {
+    state.styles.push(style);
+  }
+
+  saveState();
+  closeModal('modal-style');
+  showToast(`Style "${name}" saved!`, 'success');
+  selectedStyleId = style.id;
+  renderStyleSelector();
+  updateOutfitCountDisplay();
+}
+
+// ─────────────────────────────────────────────────────────────
+// TAG MANAGER
+// ─────────────────────────────────────────────────────────────
+
+/** Open the Manage Tags modal. */
+function openManageTags() {
+  document.getElementById('tag-manager-search').value = '';
+  renderTagManager();
+  openModal('modal-tags');
+}
+
+/**
+ * Render the tag manager list.
+ * Shows each tag, how many pieces use it, and rename/remove controls.
+ */
+function renderTagManager() {
+  const container = document.getElementById('tag-manager-list');
+  const query = document.getElementById('tag-manager-search').value.trim().toLowerCase();
+
+  const tags = state.tagRegistry.filter(t => !query || t.includes(query));
+
+  if (tags.length === 0) {
+    container.innerHTML = `<div style="padding:24px;text-align:center;color:var(--ink-light);font-family:var(--font-body);font-size:0.88rem;">
+      ${state.tagRegistry.length === 0 ? 'No tags yet. Tags are created when you add them to pieces.' : 'No tags match your search.'}
+    </div>`;
+    return;
+  }
+
+  container.innerHTML = `<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);">
+    ${tags.map(tag => {
+      const count = state.pieces.filter(p => p.tags.includes(tag)).length;
+      const unused = count === 0;
+      return `<div class="tag-manager-row">
+        <div class="tag-manager-name" onclick="filterByTagAndClose('${tag}')" title="Click to filter closet by this tag">
+          <span class="tag-pill" style="${unused ? 'opacity:0.5;' : ''}">${escHtml(tag)}</span>
+          <span class="tag-manager-count">${count} piece${count !== 1 ? 's' : ''}</span>
+          ${unused ? '<span style="font-size:0.7rem;color:var(--terracotta);">unused</span>' : ''}
+        </div>
+        <div class="tag-manager-actions">
+          <button class="btn btn-sm" onclick="openRenameTag('${tag}')" title="Rename tag">Rename</button>
+          ${unused
+            ? `<button class="btn btn-sm btn-danger" onclick="removeTagFromRegistry('${tag}')" title="Remove tag">Remove</button>`
+            : `<button class="btn btn-sm" style="opacity:0.4;cursor:not-allowed;" title="Tag is in use — remove it from all pieces first" disabled>Remove</button>`
+          }
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`;
+}
+
+/**
+ * Close the tag manager and filter the closet by the selected tag.
+ * @param {string} tag
+ */
+function filterByTagAndClose(tag) {
+  closeModal('modal-tags');
+  // Set search field to the tag and re-render
+  document.getElementById('search-input').value = tag;
+  switchView('closet');
+  renderCloset();
+}
+
+/**
+ * Remove a tag from the registry (only if unused).
+ * @param {string} tag
+ */
+function removeTagFromRegistry(tag) {
+  const count = state.pieces.filter(p => p.tags.includes(tag)).length;
+  if (count > 0) { showToast('Cannot remove a tag that is still in use.', 'error'); return; }
+  state.tagRegistry = state.tagRegistry.filter(t => t !== tag);
+  saveState();
+  renderTagManager();
+  showToast(`Tag "${tag}" removed.`, 'success');
+}
+
+/**
+ * Rename a tag across all pieces and the registry.
+ * @param {string} oldTag
+ */
+function openRenameTag(oldTag) {
+  const newTag = window.prompt(`Rename tag "${oldTag}" to:`, oldTag);
+  if (!newTag || newTag.trim() === oldTag) return;
+  const clean = newTag.trim().toLowerCase().replace(/\s+/g, '-');
+  if (!clean) { showToast('Tag name cannot be empty.', 'error'); return; }
+  if (state.tagRegistry.includes(clean) && clean !== oldTag) {
+    showToast(`Tag "${clean}" already exists.`, 'error'); return;
+  }
+
+  // Update all pieces
+  state.pieces.forEach(p => {
+    const idx = p.tags.indexOf(oldTag);
+    if (idx > -1) p.tags[idx] = clean;
+  });
+
+  // Update registry
+  const regIdx = state.tagRegistry.indexOf(oldTag);
+  if (regIdx > -1) state.tagRegistry[regIdx] = clean;
+  state.tagRegistry.sort();
+
+  saveState();
+  renderTagManager();
+  renderCloset();
+  showToast(`Renamed "${oldTag}" → "${clean}" across all pieces.`, 'success');
+}
+
+/**
+ * Remove all tags from the registry that no piece uses.
+ */
+function pruneUnusedTags() {
+  const before = state.tagRegistry.length;
+  state.tagRegistry = state.tagRegistry.filter(t =>
+    state.pieces.some(p => p.tags.includes(t))
+  );
+  const removed = before - state.tagRegistry.length;
+  saveState();
+  renderTagManager();
+  showToast(removed > 0 ? `Removed ${removed} unused tag${removed !== 1 ? 's' : ''}.` : 'No unused tags to remove.', 'success');
+}
+
+
+// ─────────────────────────────────────────────────────────────
+
+function switchView(viewId) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById(`view-${viewId}`).classList.add('active');
+
+  // Find and activate the clicked tab
+  document.querySelectorAll('.nav-tab').forEach(t => {
+    if (t.getAttribute('onclick').includes(`'${viewId}'`)) t.classList.add('active');
+  });
+
+  // Trigger view-specific renders
+  if (viewId === 'generator') {
+    renderStyleSelector();
+    updateOutfitCountDisplay();
+    updateSessionBanCount();
+  }
+  if (viewId === 'saved')   renderSavedOutfits();
+  if (viewId === 'history') renderWearHistory();
+}
+
+// ─────────────────────────────────────────────────────────────
+// HEADER STATS
+// ─────────────────────────────────────────────────────────────
+
+function updateHeaderStats() {
+  document.getElementById('stat-pieces').textContent  = state.pieces.filter(p => !p.archived).length;
+  document.getElementById('stat-outfits').textContent = state.outfits.filter(o => o.saved).length;
+}
+
+// ─────────────────────────────────────────────────────────────
+// TOAST NOTIFICATIONS
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Show a toast notification.
+ * @param {string} msg
+ * @param {'success'|'error'|'warning'|''} type
+ */
+function showToast(msg, type = '') {
+  const container = document.getElementById('toast-container');
+  const toast     = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = msg;
+  container.appendChild(toast);
+
+  // Trigger animation
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => toast.classList.add('show'));
+  });
+
+  // Auto-remove after 3s
+  setTimeout(() => {
+    toast.classList.remove('show');
+    setTimeout(() => toast.remove(), 300);
+  }, 3000);
+}
+
+// ─────────────────────────────────────────────────────────────
+// UTILITY
+// ─────────────────────────────────────────────────────────────
+
+/** Escape HTML special characters to prevent XSS. */
+function escHtml(str) {
+  return String(str || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+// ─────────────────────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────────────────────
+
+/** Boot sequence — load state and render initial UI. */
+function init() {
+  loadState();
+  renderCloset();
+  updateHeaderStats();
+  renderStyleSelector();
+  updateOutfitCountDisplay();
+  updateSessionBanCount();
+
+  // Setup drag and drop zones for import
+  setupDropZone('csv-drop-zone',  'csv-file-input',  handleCsvUpload);
+  setupDropZone('json-drop-zone', 'json-file-input', handleJsonUpload);
+
+  // Close tag suggestions when clicking outside
+  document.addEventListener('click', e => {
+    if (!e.target.closest('.tag-input-container')) hideSuggestions();
+  });
+}
+
+init();
+</script>
+</body>
+</html>
