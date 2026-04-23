@@ -1094,6 +1094,157 @@ select.form-control { cursor: pointer; }
 }
 .tag-manager-actions { display: flex; gap: 6px; margin-left: 8px; }
 
+/* ═══════════════════════════════════════════════════
+   ── SHARED TAG PICKER DROPDOWN ──
+   ═══════════════════════════════════════════════════ */
+.tag-picker-dropdown {
+  position: fixed;
+  z-index: 2000;
+  background: var(--white);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  min-width: 200px;
+  max-width: 280px;
+  max-height: 240px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.tag-picker-search {
+  padding: 8px 10px;
+  font-family: var(--font-body);
+  font-size: 0.85rem;
+  border: none;
+  border-bottom: 1px solid var(--border-light);
+  outline: none;
+  background: var(--parchment-dark);
+  color: var(--ink);
+  width: 100%;
+}
+.tag-picker-list {
+  overflow-y: auto;
+  flex: 1;
+}
+.tag-picker-item {
+  padding: 8px 12px;
+  font-size: 0.85rem;
+  font-family: var(--font-body);
+  cursor: pointer;
+  color: var(--ink-mid);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.tag-picker-item:hover { background: var(--parchment-dark); color: var(--ink); }
+.tag-picker-item.create-new {
+  color: var(--sage-dark);
+  border-top: 1px solid var(--border-light);
+  font-style: italic;
+}
+.tag-picker-item.create-new:hover { background: var(--sage-bg); }
+.tag-picker-empty {
+  padding: 10px 12px;
+  font-size: 0.82rem;
+  font-family: var(--font-body);
+  color: var(--ink-light);
+  font-style: italic;
+}
+
+/* ═══════════════════════════════════════════════════
+   ── MOBILE RESPONSIVE ──
+   ═══════════════════════════════════════════════════ */
+@media (max-width: 480px) {
+  /* App shell tighter on mobile */
+  .app-shell { padding: 0 10px; }
+
+  /* Header: stack title and stats */
+  .app-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    padding: 12px 0 8px;
+  }
+  .app-title { font-size: 1.35rem; }
+  .app-title span { display: none; }
+  .header-meta { font-size: 0.72rem; gap: 10px; }
+
+  /* Nav: smaller tabs, allow wrapping */
+  .app-nav { flex-wrap: wrap; gap: 0; }
+  .nav-tab { padding: 8px 10px; font-size: 0.78rem; flex: 1; text-align: center; min-width: 0; }
+
+  /* Closet toolbar: stack vertically */
+  .closet-toolbar { gap: 6px; }
+  .closet-toolbar .search-wrap { min-width: 100%; order: -1; }
+  .closet-toolbar .btn { flex: 1; font-size: 0.78rem; padding: 7px 8px; }
+
+  /* Filter chips: smaller */
+  .filter-chip { font-size: 0.72rem; padding: 3px 8px; }
+
+  /* Piece cards: single column */
+  .piece-grid { grid-template-columns: 1fr; }
+  .piece-card { padding: 12px 14px; }
+  .piece-card-actions .btn-icon { width: 36px; height: 36px; font-size: 1.1rem; }
+
+  /* Generator: always single column */
+  .generator-layout { grid-template-columns: 1fr; gap: 12px; }
+  .generator-panel { padding: 14px; }
+
+  /* Outfit actions: wrap + full width feel */
+  .outfit-actions { gap: 6px; }
+  .outfit-actions .btn-lg { flex: 1; padding: 10px 8px; font-size: 0.8rem; }
+
+  /* Style options: tighter */
+  .style-option { padding: 7px 8px; }
+  .style-option-name { font-size: 0.82rem; }
+  .style-option-slots { font-size: 0.68rem; }
+
+  /* Modals: full width, full height on mobile */
+  .modal-overlay { padding: 0; align-items: flex-end; }
+  .modal {
+    max-width: 100% !important;
+    width: 100%;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    max-height: 92vh;
+    padding: 20px 16px;
+  }
+  .modal-title { font-size: 1.1rem; }
+
+  /* Slot builder: stack vertically */
+  .slot-row {
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+    padding: 8px 10px;
+  }
+
+  /* History: tighter */
+  .history-entry { padding: 10px 12px; }
+
+  /* Saved outfits */
+  .saved-outfit-actions { gap: 6px; }
+  .saved-outfit-actions .btn { flex: 1; }
+
+  /* Form rows: single column on mobile */
+  .form-row { grid-template-columns: 1fr; gap: 8px; }
+  .form-row-3 { grid-template-columns: 1fr 1fr; gap: 8px; }
+
+  /* Sections */
+  .section-heading { font-size: 1.05rem; }
+  .view { padding: 16px 0 40px; }
+
+  /* Impact stats: 2-col on mobile */
+  .impact-stat-row { flex-wrap: wrap; }
+  .impact-stat { flex: 1 1 40%; }
+
+  /* Tag picker: wider on mobile */
+  .tag-picker-dropdown { min-width: 160px; max-width: 240px; }
+}
+
+@media (max-width: 380px) {
+  .nav-tab { font-size: 0.72rem; padding: 7px 6px; }
+  .outfit-actions .btn-lg { font-size: 0.75rem; }
+}
+
 </style>
 </head>
 <body>
@@ -1372,13 +1523,12 @@ select.form-control { cursor: pointer; }
 
     <div class="form-group" style="margin-top:4px;">
       <label class="form-label">Globally Exclude Tags</label>
-      <div class="tag-input-container">
-        <div class="tag-input-wrap" id="style-global-exclude-wrap" onclick="document.getElementById('style-global-exclude-field').focus()">
-          <input class="tag-input-field" id="style-global-exclude-field" type="text"
-            placeholder="Tags to exclude from entire outfit…"
-            oninput="onStyleGlobalTagInput()" onkeydown="onStyleGlobalTagKeydown(event)">
-        </div>
-        <div class="tag-suggestions" id="style-global-tag-suggestions" style="display:none;"></div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;background:var(--white);border:1px solid var(--border);border-radius:var(--radius);min-height:40px;" id="style-global-exclude-wrap">
+        <!-- global exclude tag pills injected here -->
+      </div>
+      <div style="margin-top:6px;">
+        <button type="button" class="btn btn-sm" style="font-size:0.78rem;"
+          onclick="showTagPicker(this, styleGlobalExcludeTags, t => { addStyleGlobalTag(t); })">+ Add Excluded Tag</button>
       </div>
       <div style="font-size:0.75rem;color:var(--ink-light);font-family:var(--font-body);margin-top:4px;">
         Pieces with any of these tags will never be selected for this style.
@@ -1432,13 +1582,19 @@ select.form-control { cursor: pointer; }
   <div class="modal" style="max-width:560px;">
     <h2 class="modal-title">Manage Tags</h2>
     <p style="font-size:0.85rem;color:var(--ink-mid);font-family:var(--font-body);margin-bottom:12px;">
-      All tags used across your closet. Click a tag to filter pieces by it. Remove tags that are no longer used.
+      All tags used across your closet. Click a tag to filter pieces by it. Rename or remove tags here.
     </p>
-    <div style="display:flex;gap:8px;margin-bottom:12px;">
+    <div style="display:flex;gap:8px;margin-bottom:10px;">
       <input class="form-control" id="tag-manager-search" type="text"
-        placeholder="Search tags…" oninput="renderTagManager()">
+        placeholder="Search tags…" oninput="renderTagManager()" style="flex:1;">
     </div>
-    <div id="tag-manager-list" style="max-height:360px;overflow-y:auto;"></div>
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <input class="form-control" id="tag-manager-new" type="text"
+        placeholder="New tag name…" style="flex:1;"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();createTagFromManager();}">
+      <button class="btn btn-primary" onclick="createTagFromManager()">+ Create Tag</button>
+    </div>
+    <div id="tag-manager-list" style="max-height:320px;overflow-y:auto;"></div>
     <div class="modal-footer">
       <button class="btn" onclick="pruneUnusedTags()">Remove All Unused</button>
       <button class="btn btn-primary" onclick="closeModal('modal-tags')">Done</button>
@@ -1791,45 +1947,44 @@ function runGeneration(style, maxRetries = 50) {
       return { error: 'required-empty', slot: hardFailSlot };
     }
 
-    // ── Block D: Random selection per slot ───────────────────────────────
-    // Pick a piece for each resolved slot, then apply conflict rules to
-    // narrow subsequent slots. selectedSlots builds up sequentially so
-    // earlier picks can restrict later ones via conflictRules.
+    // ── Block D: Random selection + conflict rules ────────────────────────
+    // We iterate by index so slot positions map correctly to conflictRule
+    // indices. selectedSlots[i] always corresponds to resolvedSlots[i].
     const selectedSlots = [];
-    for (const rs of resolvedSlots) {
+    let blockDFail = false;
+
+    for (let si = 0; si < resolvedSlots.length; si++) {
+      const rs = resolvedSlots[si];
+
       if (rs.skipped) {
         selectedSlots.push({ type: rs.type, piece: null, skipped: true, skipReason: rs.skipReason });
         continue;
       }
 
-      // Apply conflict rules: for each rule, if an already-selected slot
-      // picked a piece with rule.ifTag, exclude rule.thenExcludeTag from
-      // THIS slot if this slot's index matches rule.thenSlotIndex.
-      const thisSlotIndex = resolvedSlots.indexOf(rs);
+      // Apply conflict rules where this slot is the "then" target.
+      // Look through already-selected slots (by index) to see if any
+      // "if" slot picked a piece carrying the trigger tag.
       let filteredPool = [...rs.pool];
 
       if (style.conflictRules && style.conflictRules.length > 0) {
-        style.conflictRules.forEach(rule => {
-          if (rule.thenSlotIndex !== thisSlotIndex) return;
-          // Check if the "if" slot has already been selected
-          const ifSlot = selectedSlots[rule.ifSlotIndex];
-          if (!ifSlot || !ifSlot.piece) return;
-          // If the selected piece in the "if" slot has the trigger tag,
-          // exclude the "then" tag from this slot's pool
-          if (ifSlot.piece.tags.includes(rule.ifTag)) {
+        for (const rule of style.conflictRules) {
+          // Only apply when this slot is the target
+          if (rule.thenSlotIndex !== si) continue;
+          // Only apply when the "if" slot has already been resolved
+          if (rule.ifSlotIndex >= selectedSlots.length) continue;
+          const ifSlotResult = selectedSlots[rule.ifSlotIndex];
+          if (!ifSlotResult || !ifSlotResult.piece) continue;
+          // If the "if" slot's piece has the trigger tag, filter the pool
+          if (ifSlotResult.piece.tags.includes(rule.ifTag)) {
             filteredPool = filteredPool.filter(p => !p.tags.includes(rule.thenExcludeTag));
           }
-        });
+        }
       }
 
-      // If conflict rules emptied the pool, retry the entire attempt (different
-      // random picks earlier in the slot order may avoid triggering this rule).
-      // Only hard-stop if it's a required slot AND the base pool (pre-conflict)
-      // had pieces — meaning the conflict rule is the only cause of exhaustion.
+      // If conflict rules emptied the pool, soft-fail this attempt —
+      // a different random pick on the "if" slot may not trigger the rule.
       if (filteredPool.length === 0) {
-        // Signal a soft fail — break out of Block D and let the retry loop handle it
-        hardFail = true;
-        hardFailSlot = null; // null = conflict-caused, not a true empty-pool stop
+        blockDFail = true;
         break;
       }
 
@@ -1837,10 +1992,8 @@ function runGeneration(style, maxRetries = 50) {
       selectedSlots.push({ type: rs.type, piece: picked[0], skipped: false, skipReason: null });
     }
 
-    // Block D conflict-caused failure: retry from Block B (don't hard-stop)
-    if (hardFail && hardFailSlot === null) continue; // next attempt
-    // Block D true required-empty: permanent stop
-    if (hardFail) return { error: 'required-empty', slot: hardFailSlot };
+    // Soft-fail: conflict rule exhausted pool — retry from B
+    if (blockDFail) continue;
 
     // ── Block E: Assemble outfit ─────────────────────────────────────────
     const pieceIds = selectedSlots
@@ -3378,6 +3531,7 @@ function removeConflictRule(index) {
 
 /**
  * Render the conflict rules section in the style builder modal.
+ * Uses picker buttons instead of freehand text for tag selection.
  */
 function renderConflictRules() {
   let container = document.getElementById('conflict-rules-container');
@@ -3388,23 +3542,41 @@ function renderConflictRules() {
   }
   const slotLabels = editingStyleSlots.map((s, i) => `Slot ${i+1} (${s.type})`);
   container.innerHTML = `<div class="conflict-rule-list">
-    ${editingConflictRules.map((rule, i) => `
-      <div class="conflict-rule-row">
-        <span>If <select onchange="editingConflictRules[${i}].ifSlotIndex=+this.value;renderConflictRules()">
-          ${slotLabels.map((l,idx) => `<option value="${idx}" ${rule.ifSlotIndex===idx?'selected':''}>${l}</option>`).join('')}
-        </select>
-        picks tag <input type="text" value="${escHtml(rule.ifTag)}" placeholder="tag…"
-          onchange="editingConflictRules[${i}].ifTag=this.value.trim().toLowerCase()"
-          style="border:1px solid var(--border);border-radius:4px;padding:2px 6px;font-size:0.8rem;width:90px;">
-        → exclude tag <input type="text" value="${escHtml(rule.thenExcludeTag)}" placeholder="tag…"
-          onchange="editingConflictRules[${i}].thenExcludeTag=this.value.trim().toLowerCase()"
-          style="border:1px solid var(--border);border-radius:4px;padding:2px 6px;font-size:0.8rem;width:90px;">
-        from <select onchange="editingConflictRules[${i}].thenSlotIndex=+this.value;renderConflictRules()">
-          ${slotLabels.map((l,idx) => `<option value="${idx}" ${rule.thenSlotIndex===idx?'selected':''}>${l}</option>`).join('')}
-        </select></span>
+    ${editingConflictRules.map((rule, i) => {
+      const ifTagBtn = rule.ifTag
+        ? `<span class="tag-pill" style="font-size:0.75rem;cursor:pointer;" onclick="pickConflictTag(${i},'ifTag',this)">${escHtml(rule.ifTag)} ✎</span>`
+        : `<button type="button" class="btn btn-sm" style="font-size:0.72rem;padding:2px 8px;" onclick="pickConflictTag(${i},'ifTag',this)">Pick tag…</button>`;
+      const thenTagBtn = rule.thenExcludeTag
+        ? `<span class="tag-pill" style="font-size:0.75rem;cursor:pointer;background:var(--terracotta-bg);border-color:var(--terracotta);color:var(--terracotta);" onclick="pickConflictTag(${i},'thenExcludeTag',this)">${escHtml(rule.thenExcludeTag)} ✎</span>`
+        : `<button type="button" class="btn btn-sm" style="font-size:0.72rem;padding:2px 8px;" onclick="pickConflictTag(${i},'thenExcludeTag',this)">Pick tag…</button>`;
+      return `<div class="conflict-rule-row">
+        <span style="flex:1;display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:0.8rem;">
+          If <select onchange="editingConflictRules[${i}].ifSlotIndex=+this.value;renderConflictRules()" style="font-size:0.8rem;padding:2px 4px;border:1px solid var(--border);border-radius:4px;">
+            ${slotLabels.map((l,idx) => `<option value="${idx}" ${rule.ifSlotIndex===idx?'selected':''}>${l}</option>`).join('')}
+          </select>
+          picks ${ifTagBtn}
+          → exclude ${thenTagBtn}
+          from <select onchange="editingConflictRules[${i}].thenSlotIndex=+this.value;renderConflictRules()" style="font-size:0.8rem;padding:2px 4px;border:1px solid var(--border);border-radius:4px;">
+            ${slotLabels.map((l,idx) => `<option value="${idx}" ${rule.thenSlotIndex===idx?'selected':''}>${l}</option>`).join('')}
+          </select>
+        </span>
         <button class="btn btn-sm btn-danger btn-icon" onclick="removeConflictRule(${i})">✕</button>
-      </div>`).join('')}
+      </div>`;
+    }).join('')}
   </div>`;
+}
+
+/**
+ * Open the tag picker for a conflict rule field.
+ * @param {number} ruleIndex  Index in editingConflictRules
+ * @param {'ifTag'|'thenExcludeTag'} field  Which field to update
+ * @param {HTMLElement} anchorEl  Element to anchor picker to
+ */
+function pickConflictTag(ruleIndex, field, anchorEl) {
+  showTagPicker(anchorEl, [], tag => {
+    editingConflictRules[ruleIndex][field] = tag.trim().toLowerCase().replace(/\s+/g, '-');
+    renderConflictRules();
+  });
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -3446,11 +3618,7 @@ function openAddStyle() {
  * Add a new blank slot row to the style builder.
  */
 function addSlotRow() {
-  // Get all known types from the closet + defaults
-  const knownTypes = [...new Set([
-    ...PIECE_TYPES,
-    ...state.pieces.map(p => p.type)
-  ])];
+  const knownTypes = getAllTypes();
   editingStyleSlots.push({
     type: knownTypes[0] || 'top',
     required: false,
@@ -3472,29 +3640,25 @@ function removeSlotRow(index) {
 
 /**
  * Render all slot rows in the style builder modal.
- * Each row lets the user pick a type, toggle required, and set include/exclude tags.
+ * Tag inputs replaced with picker buttons — no freehand text entry.
  */
 function renderSlotBuilder() {
   const container = document.getElementById('slot-builder');
-  // Get all known types
-  const knownTypes = [...new Set([
-    ...PIECE_TYPES,
-    ...state.pieces.map(p => p.type)
-  ])].sort();
+  const knownTypes = getAllTypes();
 
   container.innerHTML = editingStyleSlots.map((slot, i) => {
     const typeOptions = knownTypes.map(t =>
-      `<option value="${t}" ${slot.type === t ? 'selected' : ''}>${t}</option>`
+      `<option value="${t}" ${slot.type === t ? 'selected' : ''}>${t.charAt(0).toUpperCase()+t.slice(1)}</option>`
     ).join('');
 
     const reqPills = slot.requiredTags.map(t =>
       `<span class="tag-pill" style="font-size:0.7rem;">${escHtml(t)}
-        <button class="tag-pill-remove" type="button" onclick="removeSlotTag(${i},'required','${t}')">×</button>
+        <button class="tag-pill-remove" type="button" onclick="removeSlotTag(${i},'required','${escHtml(t)}')">×</button>
       </span>`).join('');
 
     const exclPills = slot.excludedTags.map(t =>
       `<span class="tag-pill" style="font-size:0.7rem;background:var(--terracotta-bg);border-color:var(--terracotta);color:var(--terracotta);">${escHtml(t)}
-        <button class="tag-pill-remove" type="button" onclick="removeSlotTag(${i},'excluded','${t}')">×</button>
+        <button class="tag-pill-remove" type="button" onclick="removeSlotTag(${i},'excluded','${escHtml(t)}')">×</button>
       </span>`).join('');
 
     return `<div class="slot-row">
@@ -3515,18 +3679,16 @@ function renderSlotBuilder() {
         <div class="slot-row-label" style="color:var(--sage-dark);">Must have tags</div>
         <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
           ${reqPills}
-          <input style="border:none;outline:none;font-family:var(--font-body);font-size:0.8rem;background:transparent;min-width:80px;"
-            placeholder="+ tag, Enter"
-            onkeydown="onSlotTagKeydown(event,${i},'required')">
+          <button type="button" class="btn btn-sm" style="font-size:0.72rem;padding:3px 8px;"
+            onclick="showTagPicker(this, editingStyleSlots[${i}].requiredTags, t => { addSlotTagFromPicker(${i},'required',t); })">+ Tag</button>
         </div>
       </div>
       <div style="grid-column:1/-2;margin-top:4px;">
         <div class="slot-row-label" style="color:var(--terracotta);">Exclude tags</div>
         <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
           ${exclPills}
-          <input style="border:none;outline:none;font-family:var(--font-body);font-size:0.8rem;background:transparent;min-width:80px;"
-            placeholder="+ tag, Enter"
-            onkeydown="onSlotTagKeydown(event,${i},'excluded')">
+          <button type="button" class="btn btn-sm" style="font-size:0.72rem;padding:3px 8px;background:var(--terracotta-bg);border-color:var(--terracotta);color:var(--terracotta);"
+            onclick="showTagPicker(this, editingStyleSlots[${i}].excludedTags, t => { addSlotTagFromPicker(${i},'excluded',t); })">+ Tag</button>
         </div>
       </div>
       <div style="align-self:start;padding-top:20px;">
@@ -3534,6 +3696,24 @@ function renderSlotBuilder() {
       </div>
     </div>`;
   }).join('');
+}
+
+/**
+ * Add a tag to a slot from the picker (called by picker callback).
+ * Ensures normalization and re-renders the slot builder.
+ * @param {number} slotIndex
+ * @param {'required'|'excluded'} tagType
+ * @param {string} tag
+ */
+function addSlotTagFromPicker(slotIndex, tagType, tag) {
+  const clean = tag.trim().toLowerCase().replace(/\s+/g, '-');
+  if (!clean) return;
+  const arr = tagType === 'required'
+    ? editingStyleSlots[slotIndex].requiredTags
+    : editingStyleSlots[slotIndex].excludedTags;
+  if (!arr.includes(clean)) arr.push(clean);
+  saveState(); // persist any new tags added to registry
+  renderSlotBuilder();
 }
 
 /**
@@ -3564,12 +3744,17 @@ function updateSlotRequired(index, required) {
 function onSlotTagKeydown(e, slotIndex, tagType) {
   if (e.key === 'Enter' || e.key === ',') {
     e.preventDefault();
+    // Normalize: trim, lowercase, collapse whitespace to hyphens
     const val = e.target.value.trim().toLowerCase().replace(/\s+/g, '-');
     if (!val) return;
     const arr = tagType === 'required'
       ? editingStyleSlots[slotIndex].requiredTags
       : editingStyleSlots[slotIndex].excludedTags;
-    if (!arr.includes(val)) arr.push(val);
+    if (!arr.includes(val)) {
+      arr.push(val);
+      // Register in tag registry so it's available for piece tagging too
+      registerTags([val]);
+    }
     e.target.value = '';
     renderSlotBuilder();
   }
@@ -3616,21 +3801,17 @@ function addStyleGlobalTag(tag) {
   if (!clean || styleGlobalExcludeTags.includes(clean)) return;
   styleGlobalExcludeTags.push(clean);
   renderStyleGlobalExcludePills();
-  document.getElementById('style-global-exclude-field').value = '';
-  document.getElementById('style-global-tag-suggestions').style.display = 'none';
 }
 
 function renderStyleGlobalExcludePills() {
-  const wrap  = document.getElementById('style-global-exclude-wrap');
-  const field = document.getElementById('style-global-exclude-field');
-  wrap.querySelectorAll('.tag-pill').forEach(el => el.remove());
-  styleGlobalExcludeTags.forEach(tag => {
-    const pill = document.createElement('span');
-    pill.className = 'tag-pill';
-    pill.style.cssText = 'background:var(--terracotta-bg);border-color:var(--terracotta);color:var(--terracotta);';
-    pill.innerHTML = `${tag}<button class="tag-pill-remove" type="button" onclick="removeStyleGlobalTag('${tag}')">×</button>`;
-    wrap.insertBefore(pill, field);
-  });
+  const wrap = document.getElementById('style-global-exclude-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = styleGlobalExcludeTags.map(tag =>
+    `<span class="tag-pill" style="background:var(--terracotta-bg);border-color:var(--terracotta);color:var(--terracotta);">
+      ${escHtml(tag)}
+      <button class="tag-pill-remove" type="button" onclick="removeStyleGlobalTag('${escHtml(tag)}')">×</button>
+    </span>`
+  ).join('') || '<span style="font-size:0.78rem;color:var(--ink-light);font-family:var(--font-body);">None — all types eligible</span>';
 }
 
 function removeStyleGlobalTag(tag) {
@@ -3682,14 +3863,149 @@ function saveCustomStyle() {
 }
 
 // ─────────────────────────────────────────────────────────────
+// SHARED TAG PICKER
+// A reusable floating dropdown that shows existing tags from the
+// registry and lets the user create a new one inline.
+// Usage: call showTagPicker(anchorEl, currentTags, onSelectFn)
+//   - anchorEl: the button/element to position the picker near
+//   - currentTags: array of tags already applied (excluded from list)
+//   - onSelectFn(tag): called when user picks or creates a tag
+// ─────────────────────────────────────────────────────────────
+
+let _pickerOnSelect = null; // callback stored for the active picker
+
+/**
+ * Show the floating tag picker anchored to an element.
+ * @param {HTMLElement} anchorEl  Element to position picker below
+ * @param {string[]} currentTags  Already-selected tags (hidden in list)
+ * @param {function} onSelect     Called with the chosen tag string
+ */
+function showTagPicker(anchorEl, currentTags, onSelect) {
+  // Remove any existing picker
+  hideTagPicker();
+  _pickerOnSelect = onSelect;
+
+  const picker = document.createElement('div');
+  picker.className = 'tag-picker-dropdown';
+  picker.id = 'shared-tag-picker';
+
+  // Position anchored below the trigger element
+  const rect = anchorEl.getBoundingClientRect();
+  picker.style.top  = (rect.bottom + window.scrollY + 4) + 'px';
+  picker.style.left = rect.left + 'px';
+
+  // Search input
+  const search = document.createElement('input');
+  search.className = 'tag-picker-search';
+  search.placeholder = 'Search or type new tag…';
+  search.autofocus = true;
+  picker.appendChild(search);
+
+  // List container
+  const list = document.createElement('div');
+  list.className = 'tag-picker-list';
+  picker.appendChild(list);
+
+  document.body.appendChild(picker);
+
+  // Render list based on search
+  function renderList(query) {
+    query = query.trim().toLowerCase().replace(/\s+/g, '-');
+    const available = state.tagRegistry.filter(t =>
+      !currentTags.includes(t) && (!query || t.includes(query))
+    );
+
+    list.innerHTML = '';
+
+    if (available.length === 0 && !query) {
+      const empty = document.createElement('div');
+      empty.className = 'tag-picker-empty';
+      empty.textContent = 'No tags yet — type to create one.';
+      list.appendChild(empty);
+    }
+
+    available.forEach(tag => {
+      const item = document.createElement('div');
+      item.className = 'tag-picker-item';
+      item.textContent = tag;
+      item.onmousedown = (e) => { e.preventDefault(); selectTag(tag); };
+      list.appendChild(item);
+    });
+
+    // Always show "Create new" option if there's a query not already in registry
+    if (query && !state.tagRegistry.includes(query) && !currentTags.includes(query)) {
+      const createItem = document.createElement('div');
+      createItem.className = 'tag-picker-item create-new';
+      createItem.textContent = `+ Create "${query}"`;
+      createItem.onmousedown = (e) => {
+        e.preventDefault();
+        registerTags([query]);
+        selectTag(query);
+      };
+      list.appendChild(createItem);
+    }
+  }
+
+  function selectTag(tag) {
+    if (_pickerOnSelect) _pickerOnSelect(tag);
+    hideTagPicker();
+  }
+
+  search.addEventListener('input', () => renderList(search.value));
+  search.addEventListener('keydown', e => {
+    if (e.key === 'Escape') hideTagPicker();
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const q = search.value.trim().toLowerCase().replace(/\s+/g, '-');
+      if (!q) return;
+      if (!state.tagRegistry.includes(q)) registerTags([q]);
+      selectTag(q);
+    }
+  });
+
+  renderList('');
+  setTimeout(() => search.focus(), 50);
+}
+
+/** Remove the floating tag picker from the DOM. */
+function hideTagPicker() {
+  const existing = document.getElementById('shared-tag-picker');
+  if (existing) existing.remove();
+  _pickerOnSelect = null;
+}
+
+// Close picker when clicking outside
+document.addEventListener('mousedown', e => {
+  const picker = document.getElementById('shared-tag-picker');
+  if (picker && !picker.contains(e.target)) hideTagPicker();
+});
+
+// ─────────────────────────────────────────────────────────────
 // TAG MANAGER
 // ─────────────────────────────────────────────────────────────
 
 /** Open the Manage Tags modal. */
 function openManageTags() {
   document.getElementById('tag-manager-search').value = '';
+  document.getElementById('tag-manager-new').value = '';
   renderTagManager();
   openModal('modal-tags');
+}
+
+/**
+ * Create a new tag directly from the tag manager input field.
+ * The tag is added to the registry but not applied to any piece yet.
+ */
+function createTagFromManager() {
+  const input = document.getElementById('tag-manager-new');
+  const val = input.value.trim().toLowerCase().replace(/\s+/g, '-');
+  if (!val) { showToast('Enter a tag name.', 'warning'); return; }
+  if (state.tagRegistry.includes(val)) { showToast(`"${val}" already exists.`, 'warning'); return; }
+  registerTags([val]);
+  saveState();
+  input.value = '';
+  renderTagManager();
+  showToast(`Tag "${val}" created.`, 'success');
 }
 
 /**
