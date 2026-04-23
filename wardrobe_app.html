@@ -1686,13 +1686,27 @@ select.form-control { cursor: pointer; }
 <script>
 'use strict';
 
-// ─────────────────────────────────────────────────────────────
-// CONSTANTS & ENUMS
-// ─────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// STORAGE BACKEND CONFIGURATION
+// ─────────────────────────────────────────────────────────────────────────
+// Change this one constant to swap the entire storage backend.
+// 'localStorage' → uses the browser localStorage implementation below.
+// 'api'          → routes all calls to the REST API implementation below.
+//
+// When moving to Supabase/backend: set STORAGE_BACKEND = 'api' and fill in
+// the API implementation section. The rest of the app code is unchanged.
+// ═══════════════════════════════════════════════════════════════════════════
+const STORAGE_BACKEND = 'localStorage';
+
+// API base URL — only used when STORAGE_BACKEND = 'api'
+// Replace with your actual Supabase/Express URL when ready.
+const API_BASE_URL = 'https://your-api-url.com/api';
+
+// ─────────────────────────────────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────────────────────────────────
 const PIECE_TYPES = ['top','bottom','shoes','jacket','accessory','other'];
 
-// Built-in outfit base styles shipped with the app.
-// Each slot has: type, required (bool), requiredTags[], excludedTags[], count
 const DEFAULT_STYLES = [
   {
     id: 'default-everyday',
@@ -1703,7 +1717,8 @@ const DEFAULT_STYLES = [
       { type: 'bottom', required: true,  requiredTags: [], excludedTags: [], count: 1 },
       { type: 'shoes',  required: false, requiredTags: [], excludedTags: [], count: 1 },
     ],
-    globalExcludeTags: []
+    globalExcludeTags: [],
+    conflictRules: []
   },
   {
     id: 'default-layered',
@@ -1715,513 +1730,794 @@ const DEFAULT_STYLES = [
       { type: 'bottom', required: true,  requiredTags: [], excludedTags: [], count: 1 },
       { type: 'shoes',  required: false, requiredTags: [], excludedTags: [], count: 1 },
     ],
-    globalExcludeTags: []
+    globalExcludeTags: [],
+    conflictRules: []
   }
 ];
 
-// ─────────────────────────────────────────────────────────────
-// STATE — all persisted to localStorage except sessionBanList
-// ─────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// IN-MEMORY STATE CACHE
+// ─────────────────────────────────────────────────────────────────────────
+// This is the runtime working copy of all data. DataStore loads into it on
+// init and keeps it in sync after every write. UI code reads from `state`
+// directly (fast, synchronous) but all writes go through DataStore (async).
+// ═══════════════════════════════════════════════════════════════════════════
 let state = {
-  pieces: [],        // Array of piece objects
-  outfits: [],       // Array of saved outfit objects
-  styles: [],        // User-created outfit base styles (defaults are merged at runtime)
-  blockedList: [],   // Array of sorted hash strings — permanent
-  tagRegistry: [],   // Sorted deduplicated array of all tags ever used
-  wearHistory: [],   // Array of wear log entries {id, date, outfitId|null, pieceIds, outfitName, note}
-  typeRegistry: [],  // User-managed piece types — extends the built-in defaults
+  pieces:       [],   // Clothing piece objects
+  outfits:      [],   // Saved outfit objects
+  styles:       [],   // User-created outfit base styles
+  blockedList:  [],   // Hashed sorted ID strings — permanent blocks
+  tagRegistry:  [],   // Sorted deduplicated tag strings
+  typeRegistry: [],   // User-added custom piece types
+  wearHistory:  [],   // Wear log entries
 };
 
-// Session-only (not persisted)
-let sessionBanList = [];   // Hashed sorted ID strings banned this session
-let currentOutfit  = null; // Currently displayed candidate outfit
-let editingPieceId = null; // ID of piece being edited, or null for new
-let currentTags    = [];   // Tags being edited in the piece form
-let swappingPieceId = null; // ID of piece being swapped/upgraded
+// Session-only — never persisted
+let sessionBanList  = [];    // Hashed combos banned this session
+let currentOutfit   = null;  // Currently displayed candidate outfit
+let editingPieceId  = null;  // Piece being edited (null = new)
+let currentTags     = [];    // Tags in the piece form
+let swappingPieceId = null;  // Piece being swapped/upgraded
 
 // UI state
-let activeTypeFilter   = 'all';
-let showArchived       = false;
-let selectedStyleId    = 'default-everyday';
+let activeTypeFilter = 'all';
+let showArchived     = false;
+let selectedStyleId  = 'default-everyday';
 
-// ─────────────────────────────────────────────────────────────
-// PERSISTENCE — load / save localStorage
-// ─────────────────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════════════════════
+// DATASTORE — ABSTRACT STORAGE INTERFACE
+// ─────────────────────────────────────────────────────────────────────────
+// All storage reads and writes go through this object.
+// The UI always calls DataStore methods — never localStorage or fetch directly.
+//
+// Every method returns a Promise, even the localStorage implementation.
+// This means the calling code (async/await) works identically regardless of
+// whether the backend is localStorage or a remote API.
+//
+// Collection names match the state keys: 'pieces', 'outfits', 'styles',
+// 'blockedList', 'tagRegistry', 'typeRegistry', 'wearHistory'.
+// ═══════════════════════════════════════════════════════════════════════════
+const DataStore = (() => {
 
-/** Load all state from localStorage. Missing keys get defaults. */
-function loadState() {
-  try {
-    const raw = localStorage.getItem('wardrobe_state');
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      state.pieces      = parsed.pieces      || [];
-      state.outfits     = parsed.outfits     || [];
-      state.styles      = parsed.styles      || [];
-      state.blockedList = parsed.blockedList || [];
-      state.tagRegistry = parsed.tagRegistry || [];
-      state.wearHistory = parsed.wearHistory || [];
-      state.typeRegistry = parsed.typeRegistry || [];
-    }
-  } catch(e) {
-    console.error('Failed to load state:', e);
-    showToast('Could not load saved data. Starting fresh.', 'error');
+  // ── localStorage backend ──────────────────────────────────────────────
+  // All data is stored as a single JSON object under one key.
+  // Reads/writes happen in-memory; localStorage is synced on every write.
+  const LS_KEY = 'wardrobe_state';
+
+  const localStorageBackend = {
+
+    // Load all collections from localStorage into state.
+    // Called once on init. Returns the full state object.
+    async load() {
+      try {
+        const raw = localStorage.getItem(LS_KEY);
+        if (raw) {
+          const parsed = JSON.parse(raw);
+          state.pieces       = parsed.pieces       || [];
+          state.outfits      = parsed.outfits      || [];
+          state.styles       = parsed.styles       || [];
+          state.blockedList  = parsed.blockedList  || [];
+          state.tagRegistry  = parsed.tagRegistry  || [];
+          state.typeRegistry = parsed.typeRegistry || [];
+          state.wearHistory  = parsed.wearHistory  || [];
+        }
+      } catch(e) {
+        console.error('[DataStore:localStorage] load failed:', e);
+        showToast('Could not load saved data. Starting fresh.', 'error');
+      }
+      return state;
+    },
+
+    // Flush the entire in-memory state to localStorage.
+    // Called internally after every mutation.
+    async _flush() {
+      try {
+        localStorage.setItem(LS_KEY, JSON.stringify(state));
+      } catch(e) {
+        console.error('[DataStore:localStorage] flush failed:', e);
+        showToast('Could not save — storage may be full.', 'error');
+      }
+    },
+
+    // ── Generic collection accessors ───────────────────────────────────
+
+    async getAll(collection) {
+      return [...(state[collection] || [])];
+    },
+
+    async getById(collection, id) {
+      return (state[collection] || []).find(item => item.id === id) || null;
+    },
+
+    // Upsert: add if new id, replace if existing
+    async save(collection, item) {
+      const arr = state[collection] || [];
+      const idx = arr.findIndex(x => x.id === item.id);
+      if (idx > -1) arr[idx] = item;
+      else arr.push(item);
+      state[collection] = arr;
+      await this._flush();
+      return item;
+    },
+
+    async delete(collection, id) {
+      state[collection] = (state[collection] || []).filter(x => x.id !== id);
+      await this._flush();
+    },
+
+    // ── Special-case: replace an entire collection at once ─────────────
+    // Used for registries (tagRegistry, typeRegistry, blockedList) where
+    // the whole array is managed rather than individual items.
+    async setCollection(collection, value) {
+      state[collection] = value;
+      await this._flush();
+    },
+
+    // ── Bulk import: merge external data without overwriting existing ───
+    async import(data) {
+      const merge = (col, incoming) => {
+        if (!Array.isArray(incoming)) return;
+        const existingIds = new Set((state[col] || []).map(x => x.id));
+        incoming.forEach(item => {
+          if (!existingIds.has(item.id)) (state[col] || []).push(item);
+        });
+      };
+      merge('pieces',      data.pieces);
+      merge('outfits',     data.outfits);
+      merge('styles',      data.styles);
+      merge('wearHistory', data.wearHistory);
+      if (Array.isArray(data.blockedList)) {
+        data.blockedList.forEach(h => {
+          if (!state.blockedList.includes(h)) state.blockedList.push(h);
+        });
+      }
+      if (Array.isArray(data.typeRegistry)) {
+        data.typeRegistry.forEach(t => {
+          if (!state.typeRegistry.includes(t)) state.typeRegistry.push(t);
+        });
+      }
+      await this._flush();
+    },
+
+    // ── Full export ────────────────────────────────────────────────────
+    async export() {
+      return JSON.parse(JSON.stringify(state)); // deep clone
+    },
+  };
+
+  // ── API backend (Supabase / Express) ──────────────────────────────────
+  // Swap STORAGE_BACKEND = 'api' to activate. Implement each method by
+  // calling your actual API endpoints. The calling code never changes.
+  //
+  // FUTURE IMPLEMENTATION NOTES:
+  // - Auth header: include Bearer token from your auth session
+  // - Error handling: throw errors so the UI's try/catch can handle them
+  // - Optimistic updates: update state immediately, then confirm with API
+  // - Photos: handled separately by PhotoStore, not here
+  const apiBackend = {
+
+    async load() {
+      // FUTURE: const { data } = await supabase.from('pieces').select('*');
+      // state.pieces = data;
+      // ... repeat for each collection
+      throw new Error('API backend not yet implemented. Set STORAGE_BACKEND to "localStorage".');
+    },
+
+    async _flush() {
+      // No-op for API backend — each individual save goes directly to the API
+    },
+
+    async getAll(collection) {
+      // FUTURE: const resp = await fetch(`${API_BASE_URL}/${collection}`, {
+      //   headers: { Authorization: `Bearer ${getAuthToken()}` }
+      // });
+      // return resp.json();
+      throw new Error('API backend not yet implemented.');
+    },
+
+    async getById(collection, id) {
+      // FUTURE: fetch(`${API_BASE_URL}/${collection}/${id}`, ...)
+      throw new Error('API backend not yet implemented.');
+    },
+
+    async save(collection, item) {
+      // FUTURE: POST or PUT to `${API_BASE_URL}/${collection}`
+      // Update state cache on success
+      throw new Error('API backend not yet implemented.');
+    },
+
+    async delete(collection, id) {
+      // FUTURE: DELETE `${API_BASE_URL}/${collection}/${id}`
+      throw new Error('API backend not yet implemented.');
+    },
+
+    async setCollection(collection, value) {
+      // FUTURE: PUT `${API_BASE_URL}/${collection}/bulk`
+      throw new Error('API backend not yet implemented.');
+    },
+
+    async import(data) {
+      throw new Error('API backend not yet implemented.');
+    },
+
+    async export() {
+      throw new Error('API backend not yet implemented.');
+    },
+  };
+
+  // Route all calls to the active backend
+  const backend = STORAGE_BACKEND === 'api' ? apiBackend : localStorageBackend;
+
+  // Public interface — what the rest of the app calls
+  return {
+    load:          (...args) => backend.load(...args),
+    getAll:        (...args) => backend.getAll(...args),
+    getById:       (...args) => backend.getById(...args),
+    save:          (...args) => backend.save(...args),
+    delete:        (...args) => backend.delete(...args),
+    setCollection: (...args) => backend.setCollection(...args),
+    import:        (...args) => backend.import(...args),
+    export:        (...args) => backend.export(...args),
+  };
+})();
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PHOTOSTORE — IndexedDB for binary photo data
+// ─────────────────────────────────────────────────────────────────────────
+// Photos are kept separate from the main DataStore because:
+// 1. They are binary blobs — too large for localStorage
+// 2. IndexedDB handles blobs natively and efficiently
+// 3. The API swap is simpler: just change _upload/_download to cloud URLs
+//
+// Future API swap: replace _saveToIDB / _loadFromIDB with calls to
+// Cloudflare R2 or Supabase Storage. The rest of the app never changes.
+// ═══════════════════════════════════════════════════════════════════════════
+const PhotoStore = (() => {
+  const DB_NAME    = 'wardrobe_photos';
+  const DB_VERSION = 1;
+  const STORE_NAME = 'photos';
+
+  let _db = null;
+
+  // Open (or create) the IndexedDB database
+  async function _openDB() {
+    if (_db) return _db;
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onupgradeneeded = e => {
+        // Create the object store with pieceId as the key
+        e.target.result.createObjectStore(STORE_NAME, { keyPath: 'pieceId' });
+      };
+      req.onsuccess = e => { _db = e.target.result; resolve(_db); };
+      req.onerror   = e => reject(e.target.error);
+    });
   }
-}
 
-/** Persist all state to localStorage. */
-function saveState() {
-  try {
-    localStorage.setItem('wardrobe_state', JSON.stringify(state));
-  } catch(e) {
-    console.error('Failed to save state:', e);
-    showToast('Could not save data — storage may be full.', 'error');
+  // Save a photo for a piece. Accepts a File or Blob.
+  // Compresses to max 600px wide before storing to keep size manageable.
+  async function save(pieceId, file) {
+    // Compress the image using a canvas before storing
+    const compressed = await _compressImage(file, 600);
+    const db = await _openDB();
+    return new Promise((resolve, reject) => {
+      const tx  = db.transaction(STORE_NAME, 'readwrite');
+      const req = tx.objectStore(STORE_NAME).put({
+        pieceId,
+        blob:      compressed,
+        mimeType:  compressed.type,
+        savedAt:   new Date().toISOString()
+      });
+      req.onsuccess = () => resolve();
+      req.onerror   = e => reject(e.target.error);
+    });
   }
-}
 
-// ─────────────────────────────────────────────────────────────
+  // Retrieve a photo blob for a piece. Returns null if no photo exists.
+  async function get(pieceId) {
+    const db = await _openDB();
+    return new Promise((resolve, reject) => {
+      const tx  = db.transaction(STORE_NAME, 'readonly');
+      const req = tx.objectStore(STORE_NAME).get(pieceId);
+      req.onsuccess = e => resolve(e.target.result || null);
+      req.onerror   = e => reject(e.target.error);
+    });
+  }
+
+  // Get a URL suitable for use in an <img> src. Returns null if no photo.
+  // The returned URL must be revoked when no longer needed (URL.revokeObjectURL).
+  async function getURL(pieceId) {
+    const record = await get(pieceId);
+    if (!record) return null;
+    return URL.createObjectURL(record.blob);
+  }
+
+  // Delete a photo for a piece.
+  async function remove(pieceId) {
+    const db = await _openDB();
+    return new Promise((resolve, reject) => {
+      const tx  = db.transaction(STORE_NAME, 'readwrite');
+      const req = tx.objectStore(STORE_NAME).delete(pieceId);
+      req.onsuccess = () => resolve();
+      req.onerror   = e => reject(e.target.error);
+    });
+  }
+
+  // Check whether a photo exists for a piece.
+  async function has(pieceId) {
+    const record = await get(pieceId);
+    return record !== null;
+  }
+
+  // Get all piece IDs that have photos stored.
+  async function allIds() {
+    const db = await _openDB();
+    return new Promise((resolve, reject) => {
+      const tx  = db.transaction(STORE_NAME, 'readonly');
+      const req = tx.objectStore(STORE_NAME).getAllKeys();
+      req.onsuccess = e => resolve(e.target.result);
+      req.onerror   = e => reject(e.target.error);
+    });
+  }
+
+  // Compress an image file to a maximum width using Canvas.
+  // Returns a Blob at the compressed size.
+  // Handles JPEG, PNG, WebP, and GIF. HEIC (iPhone default) is converted
+  // via the browser's built-in decoder — supported on iOS 16+ Safari.
+  async function _compressImage(file, maxWidth = 600) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+
+        // If the image is already smaller than maxWidth, don't upscale it
+        const scale  = Math.min(1, maxWidth / img.naturalWidth);
+        const width  = Math.round(img.naturalWidth  * scale);
+        const height = Math.round(img.naturalHeight * scale);
+
+        // Guard against zero-dimension images (corrupt or empty files)
+        if (width === 0 || height === 0) {
+          reject(new Error('Image has zero dimensions — the file may be corrupt.'));
+          return;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width  = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        // White background fill before drawing — prevents transparent PNGs
+        // from rendering as black when converted to JPEG
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Try JPEG first (best compression). Fall back to PNG if toBlob fails
+        // (can happen on some browsers with certain image types).
+        canvas.toBlob(blob => {
+          if (blob) { resolve(blob); return; }
+          // JPEG failed — try PNG as fallback
+          canvas.toBlob(pngBlob => {
+            if (pngBlob) resolve(pngBlob);
+            else reject(new Error('Canvas toBlob failed for both JPEG and PNG. The image format may not be supported.'));
+          }, 'image/png');
+        }, 'image/jpeg', 0.82);
+      };
+
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        reject(new Error(
+          'Could not decode image. ' +
+          (file.type === 'image/heic' || file.name?.toLowerCase().endsWith('.heic')
+            ? 'HEIC files require iOS 16+ or a modern desktop browser. Try exporting the photo as JPEG from your Photos app first.'
+            : 'Check the file is a valid image (JPEG, PNG, WebP, or GIF).')
+        ));
+      };
+
+      img.src = url;
+    });
+  }
+
+  // FUTURE API SWAP NOTES:
+  // Replace save() body with: upload file to R2/Supabase Storage, store returned URL in DataStore
+  // Replace getURL() body with: return the stored URL from DataStore directly
+  // IndexedDB code can then be removed entirely
+
+  return { save, get, getURL, remove, has, allIds };
+})();
+
+// ─────────────────────────────────────────────────────────────────────────
 // ID GENERATION
-// ─────────────────────────────────────────────────────────────
-
-/** Generate a simple unique ID (timestamp + random). */
+// ─────────────────────────────────────────────────────────────────────────
 function uid() {
   return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 }
 
-// ─────────────────────────────────────────────────────────────
-// TAG REGISTRY
-// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────
+// TAG REGISTRY HELPERS
+// ─────────────────────────────────────────────────────────────────────────
 
-/**
- * Add tags to the global registry, keeping it sorted and deduplicated.
- * @param {string[]} tags
- */
-function registerTags(tags) {
+// Add tags to the global registry and persist. Normalizes and deduplicates.
+async function registerTags(tags) {
+  let changed = false;
   tags.forEach(t => {
     const clean = t.trim().toLowerCase();
     if (clean && !state.tagRegistry.includes(clean)) {
       state.tagRegistry.push(clean);
+      changed = true;
     }
   });
-  state.tagRegistry.sort();
-}
-
-/**
- * Remove a tag from the registry if no pieces use it.
- * @param {string} tag
- */
-function pruneTag(tag) {
-  const used = state.pieces.some(p => p.tags.includes(tag));
-  if (!used) {
-    state.tagRegistry = state.tagRegistry.filter(t => t !== tag);
+  if (changed) {
+    state.tagRegistry.sort();
+    await DataStore.setCollection('tagRegistry', state.tagRegistry);
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-// OUTFIT COMBINATION HASHING
-// ─────────────────────────────────────────────────────────────
+// Remove a tag from the registry if no pieces use it.
+async function pruneTag(tag) {
+  const used = state.pieces.some(p => p.tags.includes(tag));
+  if (!used) {
+    state.tagRegistry = state.tagRegistry.filter(t => t !== tag);
+    await DataStore.setCollection('tagRegistry', state.tagRegistry);
+  }
+}
 
-/**
- * Given an array of piece IDs, produce a deterministic hash string.
- * Used for blocked/session-ban list lookups.
- * @param {string[]} pieceIds
- * @returns {string}
- */
+// ─────────────────────────────────────────────────────────────────────────
+// TYPE REGISTRY HELPERS
+// ─────────────────────────────────────────────────────────────────────────
+
+// Built-in default types — always present regardless of typeRegistry
+const BUILTIN_TYPES = ['top','bottom','shoes','jacket','accessory','other'];
+
+// Get the full merged type list: built-ins + user-added, sorted.
+function getAllTypes() {
+  return [...new Set([...BUILTIN_TYPES, ...state.typeRegistry])].sort();
+}
+
+// Populate a <select> element with all current types.
+function populateTypeSelect(selectId, selectedValue = '') {
+  const sel = document.getElementById(selectId);
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— select —</option>'
+    + getAllTypes().map(t =>
+        `<option value="${t}" ${t === selectedValue ? 'selected' : ''}>${t.charAt(0).toUpperCase()+t.slice(1)}</option>`
+      ).join('');
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// OUTFIT COMBINATION HASHING
+// ─────────────────────────────────────────────────────────────────────────
 function hashOutfit(pieceIds) {
   return [...pieceIds].sort().join('|');
 }
 
-// ─────────────────────────────────────────────────────────────
-// OUTFIT GENERATION ALGORITHM (Blocks A–I from the spec)
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Get all active (non-archived) pieces.
- * @returns {object[]}
- */
+// ─────────────────────────────────────────────────────────────────────────
+// ACTIVE PIECES / STYLE HELPERS
+// ─────────────────────────────────────────────────────────────────────────
 function activePieces() {
   return state.pieces.filter(p => !p.archived);
 }
 
-/**
- * Get the full list of base styles (built-in defaults merged with user styles).
- * User styles with matching IDs override built-in defaults.
- * @returns {object[]}
- */
 function getAllStyles() {
   const userIds = state.styles.map(s => s.id);
   const defaults = DEFAULT_STYLES.filter(d => !userIds.includes(d.id));
   return [...defaults, ...state.styles];
 }
 
-/**
- * Get the currently selected style object.
- * @returns {object|null}
- */
 function getSelectedStyle() {
   return getAllStyles().find(s => s.id === selectedStyleId) || null;
 }
 
-/**
- * Block B: Filter the active closet to find eligible pieces for a given slot.
- * Applies: type match, required tags, excluded tags, global excludes,
- * and any session-level exclude tags (stored on the style as sessionExcludeTags).
- * @param {object} slot - SlotRule
- * @param {string[]} globalExcludeTags
- * @returns {object[]} eligible pieces
- */
+// ─────────────────────────────────────────────────────────────────────────
+// GENERATION — BLOCK B: FILTER ELIGIBLE PIECES PER SLOT
+// ─────────────────────────────────────────────────────────────────────────
 function filterSlot(slot, globalExcludeTags) {
   return activePieces().filter(piece => {
-    // Type must match
     if (piece.type !== slot.type) return false;
-    // Must have all required tags
     if (slot.requiredTags.some(t => !piece.tags.includes(t))) return false;
-    // Must not have any excluded tags (slot-level)
-    if (slot.excludedTags.some(t => piece.tags.includes(t))) return false;
-    // Must not have any global excluded tags
-    if (globalExcludeTags.some(t => piece.tags.includes(t))) return false;
+    if (slot.excludedTags.some(t =>  piece.tags.includes(t))) return false;
+    if (globalExcludeTags.some(t =>  piece.tags.includes(t))) return false;
     return true;
   });
 }
 
-/**
- * Pick `count` random distinct items from an array.
- * @param {any[]} arr
- * @param {number} count
- * @returns {any[]}
- */
 function pickRandom(arr, count) {
-  const shuffled = [...arr].sort(() => Math.random() - 0.5);
-  return shuffled.slice(0, count);
+  return [...arr].sort(() => Math.random() - 0.5).slice(0, count);
 }
 
-/**
- * Main generation function — runs Blocks B through F.
- * Returns a candidate outfit object or null if generation failed.
- *
- * Returned outfit format:
- * {
- *   slots: [{type, piece|null, skipped, skipReason}],
- *   pieceIds: string[],
- *   hash: string
- * }
- *
- * @param {object} style
- * @param {number} maxRetries
- * @returns {object|null}
- */
+// ─────────────────────────────────────────────────────────────────────────
+// GENERATION — BLOCKS B–F (runGeneration)
+// ─────────────────────────────────────────────────────────────────────────
 function runGeneration(style, maxRetries = 50) {
   for (let attempt = 0; attempt < maxRetries; attempt++) {
 
-    // ── Block B: Filter eligible pieces per slot ──────────────────────────
+    // ── Block B: filter per slot ────────────────────────────────────────
     const resolvedSlots = [];
     let hardFail = false;
     let hardFailSlot = null;
 
     for (const slot of style.slots) {
       const pool = filterSlot(slot, style.globalExcludeTags || []);
-
-      // ── Block C: Empty slot check ─────────────────────────────────────
       if (pool.length === 0) {
-        if (slot.required) {
-          // Required slot empty — hard stop
-          hardFail = true;
-          hardFailSlot = slot;
-          break;
-        } else {
-          // Optional slot empty — skip with a warning reason
-          const hasAnyOfType = activePieces().some(p => p.type === slot.type);
-          resolvedSlots.push({
-            type: slot.type,
-            pool: [],
-            skipped: true,
-            skipReason: hasAnyOfType ? 'all-filtered' : 'no-pieces'
-          });
-        }
+        if (slot.required) { hardFail = true; hardFailSlot = slot; break; }
+        const hasAnyOfType = activePieces().some(p => p.type === slot.type);
+        resolvedSlots.push({ type: slot.type, pool: [], skipped: true,
+          skipReason: hasAnyOfType ? 'all-filtered' : 'no-pieces' });
       } else {
         resolvedSlots.push({ type: slot.type, pool, skipped: false, skipReason: null });
       }
     }
 
-    // If a required slot had no eligible pieces, we can't generate
-    if (hardFail) {
-      return { error: 'required-empty', slot: hardFailSlot };
-    }
+    // ── Block C: required-empty → permanent stop ────────────────────────
+    if (hardFail) return { error: 'required-empty', slot: hardFailSlot };
 
-    // ── Block D: Random selection + conflict rules ────────────────────────
-    // We iterate by index so slot positions map correctly to conflictRule
-    // indices. selectedSlots[i] always corresponds to resolvedSlots[i].
+    // ── Block D: indexed loop + conflict rules ──────────────────────────
     const selectedSlots = [];
     let blockDFail = false;
 
     for (let si = 0; si < resolvedSlots.length; si++) {
       const rs = resolvedSlots[si];
-
       if (rs.skipped) {
         selectedSlots.push({ type: rs.type, piece: null, skipped: true, skipReason: rs.skipReason });
         continue;
       }
 
-      // Apply conflict rules where this slot is the "then" target.
-      // Look through already-selected slots (by index) to see if any
-      // "if" slot picked a piece carrying the trigger tag.
       let filteredPool = [...rs.pool];
 
       if (style.conflictRules && style.conflictRules.length > 0) {
         for (const rule of style.conflictRules) {
-          // Only apply when this slot is the target
           if (rule.thenSlotIndex !== si) continue;
-          // Only apply when the "if" slot has already been resolved
           if (rule.ifSlotIndex >= selectedSlots.length) continue;
           const ifSlotResult = selectedSlots[rule.ifSlotIndex];
           if (!ifSlotResult || !ifSlotResult.piece) continue;
-          // If the "if" slot's piece has the trigger tag, filter the pool
           if (ifSlotResult.piece.tags.includes(rule.ifTag)) {
             filteredPool = filteredPool.filter(p => !p.tags.includes(rule.thenExcludeTag));
           }
         }
       }
 
-      // If conflict rules emptied the pool, soft-fail this attempt —
-      // a different random pick on the "if" slot may not trigger the rule.
-      if (filteredPool.length === 0) {
-        blockDFail = true;
-        break;
-      }
+      if (filteredPool.length === 0) { blockDFail = true; break; }
 
       const picked = pickRandom(filteredPool, 1);
       selectedSlots.push({ type: rs.type, piece: picked[0], skipped: false, skipReason: null });
     }
 
-    // Soft-fail: conflict rule exhausted pool — retry from B
+    // Conflict soft-fail → retry from B
     if (blockDFail) continue;
 
-    // ── Block E: Assemble outfit ─────────────────────────────────────────
-    const pieceIds = selectedSlots
-      .filter(s => s.piece)
-      .map(s => s.piece.id);
+    // ── Block E: assemble outfit ────────────────────────────────────────
+    const pieceIds = selectedSlots.filter(s => s.piece).map(s => s.piece.id);
+    if (pieceIds.length === 0) return { error: 'no-pieces', slot: null };
 
-    if (pieceIds.length === 0) {
-      return { error: 'no-pieces', slot: null };
-    }
-
-    // ── Block F: Block + session-ban check ───────────────────────────────
+    // ── Block F: block + session-ban check ─────────────────────────────
     const hash = hashOutfit(pieceIds);
-    const isBlocked = state.blockedList.includes(hash);
-    const isBanned  = sessionBanList.includes(hash);
-
-    if (!isBlocked && !isBanned) {
-      // ── Pass: return the candidate outfit ────────────────────────────
+    if (!state.blockedList.includes(hash) && !sessionBanList.includes(hash)) {
       return { slots: selectedSlots, pieceIds, hash, error: null };
     }
-
-    // If blocked/banned: add to session ban and retry from B (next iteration)
     if (!sessionBanList.includes(hash)) sessionBanList.push(hash);
   }
 
-  // Max retries reached
   return { error: 'exhausted', slot: null };
 }
 
-/**
- * Generate an outfit and update the UI.
- * Called by the Generate button and the Reroll button.
- */
-function generateOutfit() {
+// ─────────────────────────────────────────────────────────────────────────
+// GENERATION — BLOCKS G+: USER-FACING OUTFIT ACTIONS
+// ─────────────────────────────────────────────────────────────────────────
+
+// Block G: generate and display an outfit
+async function generateOutfit() {
   const style = getSelectedStyle();
   if (!style) { showToast('Select an outfit style first.', 'warning'); return; }
 
   const result = runGeneration(style);
 
   if (result.error === 'required-empty') {
-    showToast(`No eligible pieces for slot: "${result.slot.type}". Add pieces or adjust filters.`, 'error');
-    renderOutfitDisplay(null);
-    return;
+    showToast(`No eligible pieces for "${result.slot.type}". Add pieces or adjust filters.`, 'error');
+    renderOutfitDisplay(null); return;
   }
   if (result.error === 'exhausted') {
-    showToast('All combinations have been shown or blocked. Try "Reset rolls" or adjust your style.', 'warning');
-    renderOutfitDisplay(null);
-    return;
+    showToast('All combinations shown or blocked. Try "Reset rolls" or adjust your style.', 'warning');
+    renderOutfitDisplay(null); return;
   }
   if (result.error === 'no-pieces') {
-    showToast('No active pieces found. Add some pieces to your closet first.', 'error');
-    renderOutfitDisplay(null);
-    return;
+    showToast('No active pieces found. Add pieces to your closet first.', 'error');
+    renderOutfitDisplay(null); return;
   }
 
-  // Add this outfit to the session ban so reroll doesn't repeat it
-  if (!sessionBanList.includes(result.hash)) {
-    sessionBanList.push(result.hash);
-  }
-
+  if (!sessionBanList.includes(result.hash)) sessionBanList.push(result.hash);
   currentOutfit = result;
   renderOutfitDisplay(result);
   updateSessionBanCount();
   updateOutfitCountDisplay();
 }
 
-// ─────────────────────────────────────────────────────────────
-// SESSION BAN MANAGEMENT
-// ─────────────────────────────────────────────────────────────
-
-/** Reset the session ban list (never touches permanent blockedList). */
+// Reset the session ban list
 function resetSession() {
   sessionBanList = [];
   updateSessionBanCount();
   showToast('Rolls reset — all combinations available again this session.', 'success');
 }
 
-/** Update the displayed session ban count. */
 function updateSessionBanCount() {
-  document.getElementById('session-ban-count').textContent =
-    `${sessionBanList.length} combination${sessionBanList.length === 1 ? '' : 's'} hidden this session`;
+  const el = document.getElementById('session-ban-count');
+  if (el) el.textContent = `${sessionBanList.length} combination${sessionBanList.length === 1 ? '' : 's'} hidden this session`;
 }
 
-// ─────────────────────────────────────────────────────────────
-// OUTFIT COUNT CALCULATOR
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Calculate how many unique outfit combinations the current style can produce
- * from the active closet, excluding blocked combinations.
- * Returns { count, formula } where formula is a readable string.
- */
+// Outfit count calculator
 function calculateOutfitCount() {
   const style = getSelectedStyle();
   if (!style) return { count: 0, formula: '' };
-
   let total = 1;
   const parts = [];
-
   for (const slot of style.slots) {
     const pool = filterSlot(slot, style.globalExcludeTags || []);
     if (pool.length === 0 && slot.required) return { count: 0, formula: 'Required slot empty' };
-    if (pool.length > 0) {
-      total *= pool.length;
-      parts.push(`${pool.length} ${slot.type}${pool.length !== 1 ? 's' : ''}`);
-    }
+    if (pool.length > 0) { total *= pool.length; parts.push(`${pool.length} ${slot.type}${pool.length !== 1 ? 's' : ''}`); }
   }
-
-  const formula = parts.join(' × ');
-  return { count: total, formula };
+  return { count: total, formula: parts.join(' × ') };
 }
 
-/** Update the outfit count display in the generator panel. */
 function updateOutfitCountDisplay() {
   const { count, formula } = calculateOutfitCount();
-  document.getElementById('outfit-count-display').textContent =
-    count > 0 ? count.toLocaleString() : '—';
-  document.getElementById('outfit-count-formula').textContent =
-    formula || 'Select a style to calculate';
+  const countEl   = document.getElementById('outfit-count-display');
+  const formulaEl = document.getElementById('outfit-count-formula');
+  if (countEl)   countEl.textContent   = count > 0 ? count.toLocaleString() : '—';
+  if (formulaEl) formulaEl.textContent = formula || 'Select a style to calculate';
 }
 
-// ─────────────────────────────────────────────────────────────
-// OUTFIT ACTIONS — save, block
-// ─────────────────────────────────────────────────────────────
-
-/** Open the save outfit modal with a preview of the current outfit. */
+// ── Save current outfit ─────────────────────────────────────────────────
 function saveCurrentOutfit() {
   if (!currentOutfit) return;
   document.getElementById('field-outfit-name').value = '';
-
-  // Build preview
-  const preview = currentOutfit.slots.map(s => {
-    if (s.skipped) return `<div style="font-size:0.82rem;color:var(--ink-light);font-style:italic;padding:3px 0;">${s.type}: skipped</div>`;
-    return `<div style="font-size:0.85rem;padding:3px 0;font-family:var(--font-body);">
-      <span style="color:var(--ink-light);font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;margin-right:8px;">${s.type}</span>
-      <strong>${s.piece.name}</strong>
-    </div>`;
-  }).join('');
+  const preview = currentOutfit.slots.map(s =>
+    s.skipped
+      ? `<div style="font-size:0.82rem;color:var(--ink-light);font-style:italic;padding:3px 0;">${s.type}: skipped</div>`
+      : `<div style="font-size:0.85rem;padding:3px 0;font-family:var(--font-body);">
+          <span style="color:var(--ink-light);font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;margin-right:8px;">${s.type}</span>
+          <strong>${s.piece.name}</strong>
+        </div>`
+  ).join('');
   document.getElementById('save-outfit-preview').innerHTML = preview;
-
   openModal('modal-save-outfit');
   setTimeout(() => document.getElementById('field-outfit-name').focus(), 100);
 }
 
-/** Confirm and persist the save. Called by the modal Save button. */
-function confirmSaveOutfit() {
+async function confirmSaveOutfit() {
   const name = document.getElementById('field-outfit-name').value.trim();
   if (!name) { showToast('Please enter an outfit name.', 'warning'); return; }
   if (!currentOutfit) return;
 
-  // Build the outfit object
   const outfit = {
-    id: uid(),
-    name,
+    id: uid(), name,
     pieces: currentOutfit.pieceIds,
     baseStyleId: selectedStyleId,
-    saved: true,
-    blocked: false,
-    wornCount: 0,
-    lastWornDate: null,
+    saved: true, blocked: false,
+    wornCount: 0, lastWornDate: null,
     dateCreated: new Date().toISOString()
   };
-  state.outfits.push(outfit);
 
-  // Increment favoriteCount for each piece in this outfit
-  currentOutfit.slots.forEach(s => {
-    if (s.piece) {
-      const p = state.pieces.find(p => p.id === s.piece.id);
-      if (p) p.favoriteCount = (p.favoriteCount || 0) + 1;
-    }
-  });
+  await DataStore.save('outfits', outfit);
 
-  saveState();
+  // Increment favoriteCount on each piece
+  for (const s of currentOutfit.slots) {
+    if (!s.piece) continue;
+    const p = state.pieces.find(p => p.id === s.piece.id);
+    if (p) { p.favoriteCount = (p.favoriteCount || 0) + 1; await DataStore.save('pieces', p); }
+  }
+
   closeModal('modal-save-outfit');
   showToast(`"${name}" saved!`, 'success');
   updateHeaderStats();
   renderSavedOutfits();
 }
 
-/** Open the block confirmation modal. */
+// ── Block this combo ────────────────────────────────────────────────────
 function blockCurrentOutfit() {
   if (!currentOutfit) return;
-
-  // Build preview
-  const preview = currentOutfit.slots
-    .filter(s => !s.skipped)
-    .map(s => `<div style="font-size:0.85rem;padding:3px 0;font-family:var(--font-body);">
+  const preview = currentOutfit.slots.filter(s => !s.skipped).map(s =>
+    `<div style="font-size:0.85rem;padding:3px 0;font-family:var(--font-body);">
       <span style="color:var(--ink-light);font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;margin-right:8px;">${s.type}</span>
       <strong>${s.piece.name}</strong>
-    </div>`).join('');
+    </div>`
+  ).join('');
   document.getElementById('block-outfit-preview').innerHTML = preview;
-
   openModal('modal-block');
 }
 
-/** Permanently block the current outfit combination. */
-function confirmBlock() {
+async function confirmBlock() {
   if (!currentOutfit) return;
   const hash = currentOutfit.hash;
-
-  // Add to permanent blocked list
-  if (!state.blockedList.includes(hash)) state.blockedList.push(hash);
-  // Also add to session ban
+  if (!state.blockedList.includes(hash)) {
+    state.blockedList.push(hash);
+    await DataStore.setCollection('blockedList', state.blockedList);
+  }
   if (!sessionBanList.includes(hash)) sessionBanList.push(hash);
-
-  saveState();
   closeModal('modal-block');
   showToast('Combination permanently blocked. Generating a new outfit…', 'success');
   updateSessionBanCount();
-
-  // Auto-generate a replacement
-  generateOutfit();
+  await generateOutfit();
 }
 
-/** Delete a saved outfit. */
-function deleteOutfit(outfitId) {
+// ── Wore This (from generator) ──────────────────────────────────────────
+function wearCurrentOutfit() {
+  if (!currentOutfit) return;
+  const preview = currentOutfit.slots.filter(s => !s.skipped).map(s =>
+    `<div class="history-entry-piece">
+      <span class="history-entry-piece-type">${s.piece.type}</span>
+      <span>${escHtml(s.piece.name)}</span>
+    </div>`
+  ).join('');
+  document.getElementById('log-wear-preview').innerHTML = preview;
+  document.getElementById('field-wear-note').value = '';
+  openModal('modal-log-wear');
+  setTimeout(() => document.getElementById('field-wear-note').focus(), 100);
+}
+
+async function confirmLogWear() {
+  if (!currentOutfit) return;
+  const note = document.getElementById('field-wear-note').value.trim();
+  const pieceIds = currentOutfit.slots.filter(s => !s.skipped).map(s => s.piece.id);
+
+  for (const id of pieceIds) {
+    const p = state.pieces.find(p => p.id === id);
+    if (p) { p.wearCount = (p.wearCount || 0) + 1; await DataStore.save('pieces', p); }
+  }
+
+  const outfitName = currentOutfit.slots.filter(s => !s.skipped).map(s => s.piece.name).join(', ');
+  const entry = {
+    id: uid(),
+    date: new Date().toISOString().slice(0, 10),
+    outfitId: null, outfitName,
+    pieceIds, note: note || null
+  };
+  await DataStore.save('wearHistory', entry);
+
+  closeModal('modal-log-wear');
+  showToast('Outfit logged as worn!', 'success');
+  renderCloset();
+}
+
+// ── Saved outfit actions ─────────────────────────────────────────────────
+async function deleteOutfit(outfitId) {
   if (!confirm('Remove this saved outfit?')) return;
-  state.outfits = state.outfits.filter(o => o.id !== outfitId);
-  saveState();
+  await DataStore.delete('outfits', outfitId);
   updateHeaderStats();
   renderSavedOutfits();
   showToast('Outfit removed.', 'success');
 }
 
-// ─────────────────────────────────────────────────────────────
-// PIECE CRUD
-// ─────────────────────────────────────────────────────────────
+async function markAsWorn(outfitId) {
+  const outfit = state.outfits.find(o => o.id === outfitId);
+  if (!outfit) return;
+  const note = window.prompt('Add a note for today (optional):', '') || null;
 
-/** Open the Add Piece modal (empty form). */
+  outfit.wornCount = (outfit.wornCount || 0) + 1;
+  outfit.lastWornDate = new Date().toISOString().slice(0, 10);
+  await DataStore.save('outfits', outfit);
+
+  for (const pieceId of outfit.pieces) {
+    const p = state.pieces.find(p => p.id === pieceId);
+    if (p) { p.wearCount = (p.wearCount || 0) + 1; await DataStore.save('pieces', p); }
+  }
+
+  const entry = {
+    id: uid(),
+    date: new Date().toISOString().slice(0, 10),
+    outfitId, outfitName: outfit.name,
+    pieceIds: [...outfit.pieces],
+    note: note ? note.trim() : null
+  };
+  await DataStore.save('wearHistory', entry);
+
+  showToast('Outfit marked as worn!', 'success');
+  renderSavedOutfits();
+  renderCloset();
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// PIECE CRUD
+// ─────────────────────────────────────────────────────────────────────────
 function openAddPiece() {
   editingPieceId = null;
   currentTags = [];
@@ -2235,7 +2531,6 @@ function openAddPiece() {
   setTimeout(() => document.getElementById('field-name').focus(), 100);
 }
 
-/** Open the Edit Piece modal pre-filled with a piece's data. */
 function openEditPiece(pieceId) {
   const piece = state.pieces.find(p => p.id === pieceId);
   if (!piece) return;
@@ -2245,55 +2540,41 @@ function openEditPiece(pieceId) {
   document.getElementById('piece-save-btn').textContent = 'Save Changes';
   document.getElementById('field-name').value = piece.name;
   populateTypeSelect('field-type', piece.type);
-  document.getElementById('field-qty').value  = piece.quantity;
+  document.getElementById('field-qty').value = piece.quantity;
   document.getElementById('piece-form-error').innerHTML = '';
   renderTagPills();
   openModal('modal-piece');
 }
 
-/** Handle the piece form submission (add or edit). */
-function savePiece(e) {
+async function savePiece(e) {
   e.preventDefault();
   const name = document.getElementById('field-name').value.trim();
   const type = document.getElementById('field-type').value;
   const qty  = parseInt(document.getElementById('field-qty').value, 10);
 
-  // Validation
   if (!name) { setPieceError('Name is required.'); return; }
   if (!type) { setPieceError('Type is required — choose from the dropdown.'); return; }
-  if (!getAllTypes().includes(type)) { setPieceError(`"${type}" is not a recognised type. Add it via Manage Types first.`); return; }
+  if (!getAllTypes().includes(type)) { setPieceError(`"${type}" is not a recognised type.`); return; }
   if (!qty || qty < 1) { setPieceError('Quantity must be at least 1.'); return; }
 
   if (editingPieceId) {
-    // Edit existing piece
     const piece = state.pieces.find(p => p.id === editingPieceId);
     if (!piece) return;
-    // Remove old tags from registry, add new ones
     piece.tags.forEach(t => pruneTag(t));
-    piece.name     = name;
-    piece.type     = type;
-    piece.quantity = qty;
-    piece.tags     = [...currentTags];
-    registerTags(currentTags);
+    piece.name = name; piece.type = type; piece.quantity = qty; piece.tags = [...currentTags];
+    await registerTags(currentTags);
+    await DataStore.save('pieces', piece);
   } else {
-    // Create new piece
     const piece = {
-      id:            uid(),
-      name,
-      type,
-      quantity:      qty,
-      tags:          [...currentTags],
-      archived:      false,
-      wearCount:     0,
-      favoriteCount: 0,
-      replacedById:  null,
-      dateAdded:     new Date().toISOString()
+      id: uid(), name, type, quantity: qty,
+      tags: [...currentTags],
+      archived: false, wearCount: 0, favoriteCount: 0,
+      replacedById: null, dateAdded: new Date().toISOString()
     };
-    state.pieces.push(piece);
-    registerTags(currentTags);
+    await registerTags(currentTags);
+    await DataStore.save('pieces', piece);
   }
 
-  saveState();
   closeModal('modal-piece');
   showToast(editingPieceId ? 'Piece updated.' : 'Piece added!', 'success');
   editingPieceId = null;
@@ -2302,53 +2583,96 @@ function savePiece(e) {
   updateOutfitCountDisplay();
 }
 
-/** Set error message in the piece form. */
 function setPieceError(msg) {
-  document.getElementById('piece-form-error').innerHTML =
-    `<div class="alert alert-error">${msg}</div>`;
+  document.getElementById('piece-form-error').innerHTML = `<div class="alert alert-error">${msg}</div>`;
 }
 
-/** Toggle the archived state of a piece (soft delete / restore). */
-function toggleArchive(pieceId) {
+async function toggleArchive(pieceId) {
   const piece = state.pieces.find(p => p.id === pieceId);
   if (!piece) return;
   piece.archived = !piece.archived;
-  saveState();
+  await DataStore.save('pieces', piece);
   showToast(piece.archived ? 'Piece archived.' : 'Piece restored to active closet.', 'success');
   renderCloset();
   updateOutfitCountDisplay();
 }
 
-/** Permanently delete a piece (with confirmation). */
-function deletePiece(pieceId) {
+async function deletePiece(pieceId) {
   const piece = state.pieces.find(p => p.id === pieceId);
   if (!piece) return;
   if (!confirm(`Permanently delete "${piece.name}"? This cannot be undone.`)) return;
-  // Remove from pieces
-  state.pieces = state.pieces.filter(p => p.id !== pieceId);
-  // Remove from any saved outfits (remove that piece ID from the outfit's piece list)
-  state.outfits.forEach(o => {
-    o.pieces = o.pieces.filter(id => id !== pieceId);
-  });
-  // Prune tags
-  piece.tags.forEach(t => pruneTag(t));
-  saveState();
+
+  await DataStore.delete('pieces', pieceId);
+
+  // Remove piece from any saved outfits
+  for (const o of state.outfits) {
+    const idx = o.pieces.indexOf(pieceId);
+    if (idx > -1) { o.pieces.splice(idx, 1); await DataStore.save('outfits', o); }
+  }
+
+  // Prune orphaned tags
+  for (const t of piece.tags) await pruneTag(t);
+
+  // Remove photo if exists
+  try { await PhotoStore.remove(pieceId); } catch(_) {}
+
   showToast('Piece permanently deleted.', 'success');
   renderCloset();
   updateHeaderStats();
 }
 
-// ─────────────────────────────────────────────────────────────
-// TAG INPUT UI
-// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────
+// PHOTO HANDLING
+// ─────────────────────────────────────────────────────────────────────────
+async function handlePhotoUpload(pieceId, file) {
+  if (!file) return;
+  try {
+    await PhotoStore.save(pieceId, file);
+    showToast('Photo saved.', 'success');
+    renderCloset(); // Refresh cards to show new photo
+  } catch(e) {
+    console.error('[PhotoStore] handlePhotoUpload failed:', e);
+    // Show the actual error so the user knows what went wrong
+    showToast(e.message || 'Could not save photo.', 'error');
+  }
+}
 
-/** Render the tag pills inside the tag input wrap. */
+async function removePhoto(pieceId) {
+  if (!confirm('Remove this photo?')) return;
+  await PhotoStore.remove(pieceId);
+  showToast('Photo removed.', 'success');
+  renderCloset();
+}
+
+// Load a photo URL for a piece card (async — sets img src after load).
+// The wrapper div starts hidden and is revealed once the photo is confirmed present.
+async function loadPiecePhoto(pieceId, imgEl) {
+  try {
+    const url = await PhotoStore.getURL(pieceId);
+    if (url && imgEl) {
+      imgEl.src = url;
+      imgEl.style.display = 'block';
+      // Show the wrapper div so the photo is actually visible
+      const wrap = imgEl.closest('.piece-card-photo-wrap');
+      if (wrap) wrap.style.display = 'block';
+      // Do NOT revoke the URL on onload — Safari on iOS will blank the image.
+      // The URL is released when the card is re-rendered or the page is closed.
+      // Memory impact is negligible for the number of photos a wardrobe has.
+    }
+  } catch(e) {
+    // Silently skip if no photo exists or load fails — piece cards without photos
+    // just show the placeholder state (wrapper stays hidden).
+    console.warn('[PhotoStore] loadPiecePhoto failed for', pieceId, e);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// TAG INPUT UI
+// ─────────────────────────────────────────────────────────────────────────
 function renderTagPills() {
-  const wrap = document.getElementById('tag-input-wrap');
-  // Remove old pills (keep the input field)
+  const wrap  = document.getElementById('tag-input-wrap');
   const field = document.getElementById('tag-field');
   wrap.querySelectorAll('.tag-pill').forEach(el => el.remove());
-  // Insert pills before the input
   currentTags.forEach(tag => {
     const pill = document.createElement('span');
     pill.className = 'tag-pill';
@@ -2357,67 +2681,45 @@ function renderTagPills() {
   });
 }
 
-/** Remove a tag from the current editing state. */
 function removeTag(tag) {
   currentTags = currentTags.filter(t => t !== tag);
   renderTagPills();
 }
 
-/** Add a tag to the current editing state and update the UI. */
-function addTag(tag) {
+async function addTag(tag) {
   const clean = tag.trim().toLowerCase().replace(/\s+/g, '-');
   if (!clean || currentTags.includes(clean)) return;
   currentTags.push(clean);
+  await registerTags([clean]);
   renderTagPills();
   document.getElementById('tag-field').value = '';
   hideSuggestions();
 }
 
-/** Handle keydown events in the tag input field. */
 function onTagKeydown(e) {
   const val = e.target.value.trim();
-  // Enter or comma adds the tag
-  if (e.key === 'Enter' || e.key === ',') {
-    e.preventDefault();
-    if (val) addTag(val);
-  }
-  // Backspace on empty field removes last tag
-  if (e.key === 'Backspace' && !val && currentTags.length > 0) {
-    removeTag(currentTags[currentTags.length - 1]);
-  }
-  // Escape hides suggestions
+  if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); if (val) addTag(val); }
+  if (e.key === 'Backspace' && !val && currentTags.length > 0) removeTag(currentTags[currentTags.length - 1]);
   if (e.key === 'Escape') hideSuggestions();
 }
 
-/** Handle input events in the tag field — show autocomplete suggestions. */
 function onTagInput() {
   const val = document.getElementById('tag-field').value.trim().toLowerCase();
   if (!val) { hideSuggestions(); return; }
-
-  // Filter registry for matches not already applied
-  const matches = state.tagRegistry.filter(t =>
-    t.includes(val) && !currentTags.includes(t)
-  ).slice(0, 8);
-
+  const matches = state.tagRegistry.filter(t => t.includes(val) && !currentTags.includes(t)).slice(0, 8);
   if (matches.length === 0) { hideSuggestions(); return; }
-
   const box = document.getElementById('tag-suggestions');
-  box.innerHTML = matches.map(t =>
-    `<div class="tag-suggestion-item" onmousedown="addTag('${t}')">${t}</div>`
-  ).join('');
+  box.innerHTML = matches.map(t => `<div class="tag-suggestion-item" onmousedown="addTag('${t}')">${t}</div>`).join('');
   box.style.display = 'block';
 }
 
-/** Hide the tag autocomplete suggestion list. */
 function hideSuggestions() {
   document.getElementById('tag-suggestions').style.display = 'none';
 }
 
-// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────
 // RENDER — CLOSET VIEW
-// ─────────────────────────────────────────────────────────────
-
-/** Set the active type filter chip and re-render the closet. */
+// ─────────────────────────────────────────────────────────────────────────
 function setTypeFilter(type, el) {
   activeTypeFilter = type;
   document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
@@ -2425,20 +2727,17 @@ function setTypeFilter(type, el) {
   renderCloset();
 }
 
-/** Toggle showing archived pieces. */
 function toggleArchived() {
   showArchived = !showArchived;
-  document.getElementById('btn-show-archived').textContent =
-    showArchived ? 'Hide Archived' : 'Show Archived';
+  const btn = document.getElementById('btn-show-archived');
+  if (btn) btn.textContent = showArchived ? 'Hide Archived' : 'Show Archived';
   renderCloset();
 }
 
-/** Main closet render — filters pieces and builds the grid. */
 function renderCloset() {
   const grid  = document.getElementById('piece-grid');
   const query = document.getElementById('search-input').value.trim().toLowerCase();
 
-  // Filter pieces
   let pieces = state.pieces.filter(p => {
     if (!showArchived && p.archived) return false;
     if (activeTypeFilter !== 'all' && p.type !== activeTypeFilter) return false;
@@ -2454,7 +2753,7 @@ function renderCloset() {
       <div class="empty-icon">🧥</div>
       <h3>${state.pieces.length === 0 ? 'Your closet is empty' : 'No pieces match your filters'}</h3>
       <p>${state.pieces.length === 0
-        ? 'Start building your wardrobe by adding pieces one at a time, or import from a CSV.'
+        ? 'Start building your wardrobe by adding pieces, or import from a CSV.'
         : 'Try clearing the search or changing the type filter.'}</p>
       ${state.pieces.length === 0 ? '<button class="btn btn-primary" onclick="openAddPiece()">+ Add First Piece</button>' : ''}
     </div>`;
@@ -2462,18 +2761,23 @@ function renderCloset() {
   }
 
   grid.innerHTML = pieces.map(p => pieceCardHTML(p)).join('');
+
+  // Async: load photos for each card after render
+  pieces.forEach(p => {
+    const imgEl = document.getElementById(`piece-photo-${p.id}`);
+    if (imgEl) loadPiecePhoto(p.id, imgEl);
+  });
 }
 
-/** Generate the HTML for a single piece card. */
 function pieceCardHTML(p) {
-  const tagPills = p.tags.map(t =>
-    `<span class="tag-pill">${t}</span>`
-  ).join('');
-
+  const tagPills = p.tags.map(t => `<span class="tag-pill">${t}</span>`).join('');
   const archivedBadge = p.archived ? '<span class="archived-badge">archived</span>' : '';
-
   return `<div class="piece-card${p.archived ? ' archived' : ''}">
     ${archivedBadge}
+    <div class="piece-card-photo-wrap" style="margin-bottom:8px;display:none;">
+      <img id="piece-photo-${p.id}" alt="${escHtml(p.name)}"
+        style="display:none;width:100%;height:120px;object-fit:cover;border-radius:var(--radius);border:1px solid var(--border);">
+    </div>
     <div class="piece-card-type">${p.type}</div>
     <div class="piece-card-name">${escHtml(p.name)}</div>
     <div class="piece-card-tags">${tagPills}</div>
@@ -2484,21 +2788,22 @@ function pieceCardHTML(p) {
     </div>
     <div class="piece-card-actions">
       <button class="btn btn-sm btn-icon" title="Edit" onclick="openEditPiece('${p.id}')">✏️</button>
+      <button class="btn btn-sm btn-icon" title="Impact preview" onclick="openImpactPreview('${p.id}','archive')">📊</button>
       <button class="btn btn-sm btn-icon" title="${p.archived ? 'Restore' : 'Archive'}" onclick="toggleArchive('${p.id}')">${p.archived ? '↩️' : '📦'}</button>
+      <label class="btn btn-sm btn-icon" title="Add photo" style="cursor:pointer;">
+        📷<input type="file" accept="image/*" style="display:none" onchange="handlePhotoUpload('${p.id}', this.files[0])">
+      </label>
       <button class="btn btn-sm btn-icon btn-danger" title="Delete" onclick="deletePiece('${p.id}')">🗑</button>
     </div>
   </div>`;
 }
 
-// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────
 // RENDER — GENERATOR VIEW
-// ─────────────────────────────────────────────────────────────
-
-/** Build the style selector radio buttons in the generator panel. */
+// ─────────────────────────────────────────────────────────────────────────
 function renderStyleSelector() {
   const el = document.getElementById('style-selector');
   const styles = getAllStyles();
-
   el.innerHTML = styles.map(s => {
     const slotSummary = s.slots.map(sl =>
       `${sl.required ? '' : '('}${sl.type}${sl.required ? '' : ')'}`
@@ -2516,21 +2821,17 @@ function renderStyleSelector() {
   }).join('');
 }
 
-/** Handle style selection change. */
 function selectStyle(styleId) {
   selectedStyleId = styleId;
-  // Update visual selected state
   document.querySelectorAll('.style-option').forEach(el => {
     el.classList.toggle('selected', el.querySelector('input').value === styleId);
   });
   updateOutfitCountDisplay();
 }
 
-/** Render the outfit display panel with the current candidate outfit. */
 function renderOutfitDisplay(outfit) {
-  const display  = document.getElementById('outfit-display');
+  const display   = document.getElementById('outfit-display');
   const actionsEl = document.getElementById('outfit-actions');
-
   if (!outfit || outfit.error) {
     display.innerHTML = `<div class="outfit-placeholder">
       <div style="font-size:2rem;opacity:0.4;">👔</div>
@@ -2539,11 +2840,8 @@ function renderOutfitDisplay(outfit) {
     actionsEl.style.display = 'none';
     return;
   }
-
-  // Build the slot rows
   const rows = outfit.slots.map(s => {
     if (s.skipped) {
-      // Determine skip reason messaging
       const reasonMsg = s.skipReason === 'all-filtered'
         ? '⚠ All options excluded by current filters'
         : s.skipReason === 'conflict-rule'
@@ -2568,20 +2866,16 @@ function renderOutfitDisplay(outfit) {
       </div>
     </div>`;
   }).join('');
-
   display.innerHTML = rows;
   actionsEl.style.display = 'flex';
 }
 
-// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────
 // RENDER — SAVED OUTFITS VIEW
-// ─────────────────────────────────────────────────────────────
-
-/** Render the saved outfits list. */
+// ─────────────────────────────────────────────────────────────────────────
 function renderSavedOutfits() {
   const container = document.getElementById('saved-outfits-list');
   const saved = state.outfits.filter(o => o.saved && !o.blocked);
-
   if (saved.length === 0) {
     container.innerHTML = `<div class="empty-state">
       <div class="empty-icon">📋</div>
@@ -2590,27 +2884,17 @@ function renderSavedOutfits() {
     </div>`;
     return;
   }
-
   container.innerHTML = saved.map(o => savedOutfitCardHTML(o)).join('');
 }
 
-/** Generate the HTML for a saved outfit card. */
 function savedOutfitCardHTML(o) {
-  // Resolve piece objects from IDs
-  const pieces = o.pieces
-    .map(id => state.pieces.find(p => p.id === id))
-    .filter(Boolean);
-
+  const pieces = o.pieces.map(id => state.pieces.find(p => p.id === id)).filter(Boolean);
   const pieceRows = pieces.map(p => `
     <div class="saved-outfit-piece-row">
       <span class="saved-outfit-piece-type">${p.type}</span>
       <span>${escHtml(p.name)}</span>
     </div>`).join('');
-
-  const lastWorn = o.lastWornDate
-    ? `Last worn: ${o.lastWornDate}`
-    : 'Not yet worn';
-
+  const lastWorn = o.lastWornDate ? `Last worn: ${o.lastWornDate}` : 'Not yet worn';
   return `<div class="saved-outfit-card">
     <div class="saved-outfit-header">
       <div class="saved-outfit-name">${escHtml(o.name)}</div>
@@ -2627,387 +2911,11 @@ function savedOutfitCardHTML(o) {
   </div>`;
 }
 
-// ─────────────────────────────────────────────────────────────
-// IMPORT — CSV
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Handle CSV file upload. Parses and validates the file.
- * Expected header row: name, type, quantity (case-insensitive).
- * Additional columns become tags on the piece.
- */
-function handleCsvUpload(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = ev => {
-    const result = parseCsv(ev.target.result);
-    const errEl = document.getElementById('csv-error');
-    if (result.errors.length > 0) {
-      errEl.innerHTML = `<div class="alert alert-error">
-        <strong>Import errors:</strong><br>${result.errors.map(escHtml).join('<br>')}
-      </div>`;
-    } else {
-      errEl.innerHTML = '';
-    }
-    if (result.pieces.length > 0) {
-      // Merge imported pieces (don't overwrite existing)
-      let added = 0;
-      result.pieces.forEach(p => {
-        state.pieces.push(p);
-        registerTags(p.tags);
-        added++;
-      });
-      saveState();
-      renderCloset();
-      updateHeaderStats();
-      updateOutfitCountDisplay();
-      showToast(`Imported ${added} piece${added !== 1 ? 's' : ''} successfully.`, 'success');
-    }
-  };
-  reader.readAsText(file);
-  // Reset input so the same file can be re-uploaded
-  e.target.value = '';
-}
-
-/**
- * Parse a CSV string into piece objects.
- * Required columns: name, type, quantity.
- * Extra columns become tags.
- * Returns { pieces: [], errors: [] }
- */
-function parseCsv(text) {
-  const lines  = text.trim().split(/\r?\n/).filter(l => l.trim());
-  const errors = [];
-  const pieces = [];
-
-  if (lines.length < 2) {
-    errors.push('CSV must have a header row and at least one data row.');
-    return { pieces, errors };
-  }
-
-  // Parse header
-  const headers = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
-
-  // Validate required columns exist
-  const requiredCols = ['name', 'type', 'quantity'];
-  const missingCols = requiredCols.filter(c => !headers.includes(c));
-  if (missingCols.length > 0) {
-    errors.push(`Missing required column(s): ${missingCols.join(', ')}. `
-      + `Header must include: name, type, quantity`);
-    return { pieces, errors };
-  }
-
-  const nameIdx = headers.indexOf('name');
-  const typeIdx = headers.indexOf('type');
-  const qtyIdx  = headers.indexOf('quantity');
-
-  // Parse data rows
-  for (let i = 1; i < lines.length; i++) {
-    const rowNum = i + 1;
-    const cols   = parseCsvLine(lines[i]);
-
-    const rawName = (cols[nameIdx] || '').trim();
-    const rawType = (cols[typeIdx] || '').trim().toLowerCase().replace(/\s+/g, '-');
-    const rawQty  = (cols[qtyIdx]  || '').trim();
-
-    // Validate each field — rowErrors collects per-row issues
-    const rowErrors = [];
-    if (!rawName)                             rowErrors.push('name is empty');
-    // Accept any type value — unknown types are auto-registered in typeRegistry
-    if (!rawType)                             rowErrors.push('type is empty');
-    const qty = parseInt(rawQty, 10);
-    if (isNaN(qty) || qty < 1)               rowErrors.push(`quantity "${rawQty}" must be a positive integer`);
-
-    if (rowErrors.length > 0) {
-      errors.push(`Row ${rowNum}: ${rowErrors.join('; ')}`);
-      continue;
-    }
-
-    // Auto-register any new type not already in the registry
-    if (rawType && !getAllTypes().includes(rawType)) {
-      state.typeRegistry.push(rawType);
-      state.typeRegistry.sort();
-    }
-
-    // Any extra columns become tags
-    const extraTags = headers
-      .filter((h, idx) => !requiredCols.includes(h) && cols[idx] && cols[idx].trim())
-      .map((h, idx) => {
-        // Use the cell value as a tag if it looks like a tag, otherwise use the column name
-        const val = (cols[headers.indexOf(h)] || '').trim().toLowerCase();
-        return val;
-      })
-      .filter(Boolean);
-
-    pieces.push({
-      id:            uid(),
-      name:          rawName,
-      type:          rawType,
-      quantity:      qty,
-      tags:          extraTags,
-      archived:      false,
-      wearCount:     0,
-      favoriteCount: 0,
-      replacedById:  null,
-      dateAdded:     new Date().toISOString()
-    });
-  }
-
-  return { pieces, errors };
-}
-
-/**
- * Parse a single CSV line, handling quoted fields.
- * @param {string} line
- * @returns {string[]}
- */
-function parseCsvLine(line) {
-  const result = [];
-  let current  = '';
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      inQuotes = !inQuotes;
-    } else if (ch === ',' && !inQuotes) {
-      result.push(current);
-      current = '';
-    } else {
-      current += ch;
-    }
-  }
-  result.push(current);
-  return result;
-}
-
-// ─────────────────────────────────────────────────────────────
-// IMPORT — JSON
-// ─────────────────────────────────────────────────────────────
-
-/** Handle JSON backup file upload. Merges into existing state. */
-function handleJsonUpload(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = ev => {
-    const errEl = document.getElementById('json-error');
-    try {
-      const data = JSON.parse(ev.target.result);
-      let added = 0;
-
-      // Merge pieces by ID (skip existing)
-      if (Array.isArray(data.pieces)) {
-        const existingIds = new Set(state.pieces.map(p => p.id));
-        data.pieces.forEach(p => {
-          if (!existingIds.has(p.id)) {
-            state.pieces.push(p);
-            registerTags(p.tags || []);
-            added++;
-          }
-        });
-      }
-      // Merge outfits
-      if (Array.isArray(data.outfits)) {
-        const existingIds = new Set(state.outfits.map(o => o.id));
-        data.outfits.forEach(o => {
-          if (!existingIds.has(o.id)) state.outfits.push(o);
-        });
-      }
-      // Merge blocked list
-      if (Array.isArray(data.blockedList)) {
-        data.blockedList.forEach(h => {
-          if (!state.blockedList.includes(h)) state.blockedList.push(h);
-        });
-      }
-
-      saveState();
-      renderCloset();
-      updateHeaderStats();
-      updateOutfitCountDisplay();
-      errEl.innerHTML = '';
-      showToast(`Merged ${added} new piece${added !== 1 ? 's' : ''} from backup.`, 'success');
-    } catch(err) {
-      errEl.innerHTML = `<div class="alert alert-error">Invalid JSON file. ${escHtml(err.message)}</div>`;
-    }
-  };
-  reader.readAsText(file);
-  e.target.value = '';
-}
-
-// ─────────────────────────────────────────────────────────────
-// EXPORT — ZIP (CSV + JSON)
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Export the wardrobe as a ZIP containing:
- *   - closet.csv   (all pieces)
- *   - outfits.csv  (all saved outfits)
- *   - backup.json  (full state)
- *
- * Uses a simple in-memory zip approach (no external library).
- * Falls back to downloading the two files separately if zip is unavailable.
- */
-function exportZip() {
-  // Build CSV content for pieces
-  const csvHeader = 'name,type,quantity,tags,wearCount,favoriteCount,archived,dateAdded\n';
-  const csvRows   = state.pieces.map(p =>
-    [
-      csvEsc(p.name),
-      p.type,
-      p.quantity,
-      csvEsc(p.tags.join(';')),
-      p.wearCount || 0,
-      p.favoriteCount || 0,
-      p.archived ? 'true' : 'false',
-      p.dateAdded || ''
-    ].join(',')
-  ).join('\n');
-  const csvContent = csvHeader + csvRows;
-
-  // Build JSON backup
-  const jsonContent = JSON.stringify(state, null, 2);
-
-  // Download both files (ZIP encoding requires a library we can't load;
-  // downloading separately is the reliable path)
-  downloadText('closet.csv',  csvContent, 'text/csv');
-  setTimeout(() => downloadText('backup.json', jsonContent, 'application/json'), 300);
-  showToast('Downloading closet.csv and backup.json…', 'success');
-}
-
-/** Trigger a text file download. */
-function downloadText(filename, content, mime) {
-  const blob = new Blob([content], { type: mime });
-  const url  = URL.createObjectURL(blob);
-  const a    = document.createElement('a');
-  a.href     = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
-}
-
-/** Escape a value for CSV (wrap in quotes if it contains commas or quotes). */
-function csvEsc(val) {
-  const s = String(val || '');
-  return s.includes(',') || s.includes('"') || s.includes('\n')
-    ? `"${s.replace(/"/g, '""')}"` : s;
-}
-
-// ─────────────────────────────────────────────────────────────
-// DRAG & DROP on import zones
-// ─────────────────────────────────────────────────────────────
-function setupDropZone(zoneId, inputId, handler) {
-  const zone = document.getElementById(zoneId);
-  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
-  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
-  zone.addEventListener('drop', e => {
-    e.preventDefault();
-    zone.classList.remove('drag-over');
-    const file = e.dataTransfer.files[0];
-    if (!file) return;
-    // Fake a file input change event
-    handler({ target: { files: [file], value: '' } });
-  });
-}
-
-// ─────────────────────────────────────────────────────────────
-// MODAL HELPERS
-// ─────────────────────────────────────────────────────────────
-
-function openModal(id) {
-  document.getElementById(id).classList.add('open');
-  document.body.style.overflow = 'hidden';
-}
-function closeModal(id) {
-  document.getElementById(id).classList.remove('open');
-  document.body.style.overflow = '';
-}
-
-// Close modals on overlay click
-document.querySelectorAll('.modal-overlay').forEach(overlay => {
-  overlay.addEventListener('click', e => {
-    if (e.target === overlay) closeModal(overlay.id);
-  });
-});
-
-// ─────────────────────────────────────────────────────────────
-// WEAR CURRENT OUTFIT (from generator — may not be saved)
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Open the "Log as Worn" modal for the currently displayed generated outfit.
- * This works whether or not the outfit has been saved.
- */
-function wearCurrentOutfit() {
-  if (!currentOutfit) return;
-
-  // Build preview
-  const preview = currentOutfit.slots
-    .filter(s => !s.skipped)
-    .map(s => `<div class="history-entry-piece">
-      <span class="history-entry-piece-type">${s.piece.type}</span>
-      <span>${escHtml(s.piece.name)}</span>
-    </div>`).join('');
-  document.getElementById('log-wear-preview').innerHTML = preview;
-  document.getElementById('field-wear-note').value = '';
-
-  openModal('modal-log-wear');
-  setTimeout(() => document.getElementById('field-wear-note').focus(), 100);
-}
-
-/**
- * Confirm and write the wear log entry for the current generated outfit.
- * Updates piece.wearCount for every piece in the outfit.
- */
-function confirmLogWear() {
-  if (!currentOutfit) return;
-  const note = document.getElementById('field-wear-note').value.trim();
-
-  // Update wearCount on each piece
-  const pieceIds = currentOutfit.slots
-    .filter(s => !s.skipped)
-    .map(s => s.piece.id);
-
-  pieceIds.forEach(id => {
-    const p = state.pieces.find(p => p.id === id);
-    if (p) p.wearCount = (p.wearCount || 0) + 1;
-  });
-
-  // Build outfit name from pieces for the log
-  const outfitName = currentOutfit.slots
-    .filter(s => !s.skipped)
-    .map(s => s.piece.name)
-    .join(', ');
-
-  // Write wear history entry
-  const entry = {
-    id:         uid(),
-    date:       new Date().toISOString().slice(0, 10), // YYYY-MM-DD
-    outfitId:   null,          // Not a saved outfit — generated ad-hoc
-    outfitName: outfitName,
-    pieceIds,
-    note:       note || null,
-  };
-  state.wearHistory.push(entry);
-
-  saveState();
-  closeModal('modal-log-wear');
-  showToast('Outfit logged as worn!', 'success');
-  renderCloset(); // Refresh wear counts on piece cards
-}
-
-// ─────────────────────────────────────────────────────────────
-// WEAR HISTORY RENDER
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Render the Wear History view.
- * Groups entries by date (most recent first), shows outfit name,
- * pieces, and an editable note field per entry.
- */
+// ─────────────────────────────────────────────────────────────────────────
+// RENDER — WEAR HISTORY VIEW
+// ─────────────────────────────────────────────────────────────────────────
 function renderWearHistory() {
   const container = document.getElementById('wear-history-list');
-
   if (state.wearHistory.length === 0) {
     container.innerHTML = `<div class="empty-state">
       <div class="empty-icon">📅</div>
@@ -3016,56 +2924,38 @@ function renderWearHistory() {
     </div>`;
     return;
   }
-
-  // Sort entries newest first
   const sorted = [...state.wearHistory].sort((a, b) => b.date.localeCompare(a.date));
-
-  // Group by date
   const byDate = {};
   sorted.forEach(entry => {
     if (!byDate[entry.date]) byDate[entry.date] = [];
     byDate[entry.date].push(entry);
   });
-
   container.innerHTML = Object.entries(byDate).map(([date, entries]) => {
     const displayDate = formatHistoryDate(date);
-    const entriesHtml = entries.map(e => historyEntryHTML(e)).join('');
     return `<div class="history-day">
       <div class="history-day-header">
         <div class="history-day-date">${displayDate}</div>
         <div class="history-day-count">${entries.length} outfit${entries.length !== 1 ? 's' : ''} worn</div>
       </div>
-      ${entriesHtml}
+      ${entries.map(e => historyEntryHTML(e)).join('')}
     </div>`;
   }).join('');
 }
 
-/**
- * Generate HTML for a single wear history entry.
- * @param {object} entry
- * @returns {string}
- */
 function historyEntryHTML(entry) {
-  // Resolve piece objects
-  const pieces = entry.pieceIds
-    .map(id => state.pieces.find(p => p.id === id))
-    .filter(Boolean);
-
+  const pieces = entry.pieceIds.map(id => state.pieces.find(p => p.id === id)).filter(Boolean);
   const pieceRows = pieces.map(p => `
     <div class="history-entry-piece">
       <span class="history-entry-piece-type">${p.type}</span>
       <span>${escHtml(p.name)}</span>
     </div>`).join('');
-
   const noteSection = entry.note
     ? `<div class="history-note">📝 ${escHtml(entry.note)}</div>`
     : `<div style="margin-top:8px;">
         <textarea class="history-note-input" rows="2"
           placeholder="Add a note about this day…"
-          onblur="saveHistoryNote('${entry.id}', this.value)"
-        ></textarea>
+          onblur="saveHistoryNote('${entry.id}', this.value)"></textarea>
        </div>`;
-
   return `<div class="history-entry">
     <div class="history-entry-header">
       <div class="history-entry-name">${escHtml(entry.outfitName)}</div>
@@ -3076,128 +2966,36 @@ function historyEntryHTML(entry) {
   </div>`;
 }
 
-/**
- * Save a note on a wear history entry (called on blur of the note textarea).
- * @param {string} entryId
- * @param {string} note
- */
-function saveHistoryNote(entryId, note) {
+async function saveHistoryNote(entryId, note) {
   const entry = state.wearHistory.find(e => e.id === entryId);
   if (!entry) return;
   const trimmed = note.trim();
   if (!trimmed) return;
   entry.note = trimmed;
-  saveState();
-  renderWearHistory(); // Re-render so the textarea becomes a display note
+  await DataStore.save('wearHistory', entry);
+  renderWearHistory();
   showToast('Note saved.', 'success');
 }
 
-/**
- * Remove a wear history entry.
- * @param {string} entryId
- */
-function deleteHistoryEntry(entryId) {
+async function deleteHistoryEntry(entryId) {
   if (!confirm('Remove this wear history entry?')) return;
-  state.wearHistory = state.wearHistory.filter(e => e.id !== entryId);
-  saveState();
+  await DataStore.delete('wearHistory', entryId);
   renderWearHistory();
   showToast('Entry removed.', 'success');
 }
 
-/**
- * Format a YYYY-MM-DD date string for display.
- * @param {string} dateStr
- * @returns {string}
- */
 function formatHistoryDate(dateStr) {
-  const d = new Date(dateStr + 'T12:00:00'); // Noon to avoid timezone shifts
-  const today = new Date().toISOString().slice(0, 10);
+  const d         = new Date(dateStr + 'T12:00:00');
+  const today     = new Date().toISOString().slice(0, 10);
   const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
   if (dateStr === today) return 'Today';
   if (dateStr === yesterday) return 'Yesterday';
   return d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 }
 
-// ─────────────────────────────────────────────────────────────
-// WEAR FROM SAVED OUTFITS — updated markAsWorn to also log history
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Mark a saved outfit as worn.
- * Updates outfit.wornCount, outfit.lastWornDate, piece.wearCount,
- * and writes a wear history entry.
- * Replaces the previous markAsWorn function.
- * @param {string} outfitId
- */
-function markAsWorn(outfitId) {
-  const outfit = state.outfits.find(o => o.id === outfitId);
-  if (!outfit) return;
-
-  // Prompt for optional note via a simple prompt (can be a modal in a future rev)
-  const note = window.prompt('Add a note for today (optional):', '') || null;
-
-  // Increment outfit counters
-  outfit.wornCount = (outfit.wornCount || 0) + 1;
-  outfit.lastWornDate = new Date().toISOString().slice(0, 10);
-
-  // Increment wearCount on each piece
-  outfit.pieces.forEach(pieceId => {
-    const p = state.pieces.find(p => p.id === pieceId);
-    if (p) p.wearCount = (p.wearCount || 0) + 1;
-  });
-
-  // Write wear history entry
-  const entry = {
-    id:         uid(),
-    date:       new Date().toISOString().slice(0, 10),
-    outfitId:   outfitId,
-    outfitName: outfit.name,
-    pieceIds:   [...outfit.pieces],
-    note:       note ? note.trim() : null,
-  };
-  state.wearHistory.push(entry);
-
-  saveState();
-  showToast('Outfit marked as worn!', 'success');
-  renderSavedOutfits();
-  renderCloset();
-}
-
-// ─────────────────────────────────────────────────────────────
-// TYPE REGISTRY — infinite user-defined types
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Built-in default types that always exist.
- * Users can add more via the type manager but cannot delete these.
- */
-const BUILTIN_TYPES = ['top','bottom','shoes','jacket','accessory','other'];
-
-/**
- * Get the full merged type list: built-ins + user-added, sorted.
- * @returns {string[]}
- */
-function getAllTypes() {
-  const merged = [...new Set([...BUILTIN_TYPES, ...state.typeRegistry])];
-  return merged.sort();
-}
-
-/**
- * Populate a <select> element with all current types.
- * @param {string} selectId
- * @param {string} [selectedValue]
- */
-function populateTypeSelect(selectId, selectedValue = '') {
-  const sel = document.getElementById(selectId);
-  if (!sel) return;
-  const types = getAllTypes();
-  sel.innerHTML = '<option value="">— select —</option>'
-    + types.map(t => `<option value="${t}" ${t === selectedValue ? 'selected' : ''}>${t.charAt(0).toUpperCase() + t.slice(1)}</option>`).join('');
-}
-
-/**
- * Open the Manage Types modal.
- */
+// ─────────────────────────────────────────────────────────────────────────
+// TYPE MANAGER
+// ─────────────────────────────────────────────────────────────────────────
 function openManageTypes() {
   renderTypeList();
   document.getElementById('field-new-type').value = '';
@@ -3205,9 +3003,6 @@ function openManageTypes() {
   openModal('modal-types');
 }
 
-/**
- * Render the type chip list in the Manage Types modal.
- */
 function renderTypeList() {
   const container = document.getElementById('type-list');
   const all = getAllTypes();
@@ -3219,82 +3014,52 @@ function renderTypeList() {
         ${t}${count > 0 ? ` <span style="font-size:0.68rem;color:var(--ink-light);">(${count})</span>` : ''}
         ${isBuiltin
           ? '<span style="font-size:0.68rem;color:var(--border);margin-left:2px;">built-in</span>'
-          : `<button class="type-chip-remove" onclick="removeCustomType('${t}')" title="Remove type">×</button>`
-        }
+          : `<button class="type-chip-remove" onclick="removeCustomType('${t}')" title="Remove type">×</button>`}
       </span>`;
     }).join('')}
   </div>`;
 }
 
-/**
- * Add a new custom type from the modal input.
- */
-function addCustomType() {
+async function addCustomType() {
   const val = document.getElementById('field-new-type').value.trim().toLowerCase().replace(/\s+/g, '-');
   const errEl = document.getElementById('type-error');
   if (!val) { errEl.innerHTML = '<div class="alert alert-error">Enter a type name.</div>'; return; }
   if (getAllTypes().includes(val)) { errEl.innerHTML = '<div class="alert alert-error">That type already exists.</div>'; return; }
   state.typeRegistry.push(val);
   state.typeRegistry.sort();
-  saveState();
+  await DataStore.setCollection('typeRegistry', state.typeRegistry);
   document.getElementById('field-new-type').value = '';
   errEl.innerHTML = '';
   renderTypeList();
   showToast(`Type "${val}" added.`, 'success');
 }
 
-/**
- * Remove a user-added custom type (only if no pieces use it).
- * @param {string} type
- */
-function removeCustomType(type) {
+async function removeCustomType(type) {
   const inUse = state.pieces.some(p => p.type === type);
-  if (inUse) {
-    showToast(`Cannot remove "${type}" — pieces are using it. Re-type those pieces first.`, 'error');
-    return;
-  }
+  if (inUse) { showToast(`Cannot remove "${type}" — pieces are using it.`, 'error'); return; }
   state.typeRegistry = state.typeRegistry.filter(t => t !== type);
-  saveState();
+  await DataStore.setCollection('typeRegistry', state.typeRegistry);
   renderTypeList();
   showToast(`Type "${type}" removed.`, 'success');
 }
 
-// ─────────────────────────────────────────────────────────────
-// IMPACT PREVIEW
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Calculate the wardrobe impact of removing a piece.
- * Returns stats and affected outfit/style info without modifying state.
- * @param {string} pieceId
- * @returns {object} { pieceName, affectedSavedOutfits, outfitCountBefore, outfitCountAfter, affectedStyles }
- */
+// ─────────────────────────────────────────────────────────────────────────
+// IMPACT PREVIEW & SWAP/UPGRADE
+// ─────────────────────────────────────────────────────────────────────────
 function calculateImpact(pieceId) {
   const piece = state.pieces.find(p => p.id === pieceId);
   if (!piece) return null;
-
-  // Saved outfits that include this piece
   const affectedSavedOutfits = state.outfits.filter(o => o.saved && o.pieces.includes(pieceId));
-
-  // Outfit count before and after for each style
   const styleImpacts = getAllStyles().map(style => {
     const before = computeStyleCount(style, []);
     const after  = computeStyleCount(style, [pieceId]);
     return { styleName: style.name, before, after, delta: before - after };
   }).filter(s => s.delta > 0);
-
   const totalBefore = styleImpacts.reduce((sum, s) => sum + s.before, 0);
   const totalAfter  = styleImpacts.reduce((sum, s) => sum + s.after,  0);
-
   return { piece, affectedSavedOutfits, styleImpacts, totalBefore, totalAfter };
 }
 
-/**
- * Compute the generatable outfit count for a style, optionally excluding certain piece IDs.
- * @param {object} style
- * @param {string[]} excludeIds  Piece IDs to treat as if archived
- * @returns {number}
- */
 function computeStyleCount(style, excludeIds = []) {
   let total = 1;
   for (const slot of style.slots) {
@@ -3313,20 +3078,12 @@ function computeStyleCount(style, excludeIds = []) {
   return total;
 }
 
-/**
- * Open the impact preview modal for a piece before archiving or swapping.
- * @param {string} pieceId
- * @param {'archive'|'swap'} action  What we'll do if confirmed
- */
 function openImpactPreview(pieceId, action) {
   const impact = calculateImpact(pieceId);
   if (!impact) return;
-
   const { piece, affectedSavedOutfits, styleImpacts, totalBefore, totalAfter } = impact;
-
   document.getElementById('modal-impact-title').textContent =
     action === 'swap' ? `Swap Impact — ${piece.name}` : `Archive Impact — ${piece.name}`;
-
   const statsHtml = `<div class="impact-stat-row">
     <div class="impact-stat ${affectedSavedOutfits.length > 0 ? 'warn' : 'good'}">
       <div class="impact-stat-number">${affectedSavedOutfits.length}</div>
@@ -3341,25 +3098,16 @@ function openImpactPreview(pieceId, action) {
       <div class="impact-stat-label">Combinations remaining</div>
     </div>
   </div>`;
-
   const savedList = affectedSavedOutfits.length > 0
     ? `<div style="font-size:0.78rem;font-weight:600;color:var(--ink-light);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.05em;">Affected saved outfits</div>
-      <div class="impact-affected-list">
-        ${affectedSavedOutfits.map(o =>
-          `<div class="impact-affected-item">${escHtml(o.name)}</div>`).join('')}
-      </div>` : '';
-
+       <div class="impact-affected-list">${affectedSavedOutfits.map(o =>
+         `<div class="impact-affected-item">${escHtml(o.name)}</div>`).join('')}</div>` : '';
   const styleList = styleImpacts.length > 0
     ? `<div style="font-size:0.78rem;font-weight:600;color:var(--ink-light);margin-bottom:4px;text-transform:uppercase;letter-spacing:0.05em;">Style impact</div>
-      <div class="impact-affected-list">
-        ${styleImpacts.map(s =>
-          `<div class="impact-affected-item">${escHtml(s.styleName)}: ${s.before.toLocaleString()} → ${s.after.toLocaleString()} combos</div>`
-        ).join('')}
-      </div>` : '';
-
+       <div class="impact-affected-list">${styleImpacts.map(s =>
+         `<div class="impact-affected-item">${escHtml(s.styleName)}: ${s.before.toLocaleString()} → ${s.after.toLocaleString()} combos</div>`
+       ).join('')}</div>` : '';
   document.getElementById('impact-content').innerHTML = statsHtml + savedList + styleList;
-
-  // Footer buttons depend on action
   const footerEl = document.getElementById('impact-footer');
   if (action === 'archive') {
     footerEl.innerHTML = `
@@ -3372,118 +3120,93 @@ function openImpactPreview(pieceId, action) {
       <button class="btn" onclick="closeModal('modal-impact')">Cancel</button>
       <button class="btn btn-primary" onclick="closeModal('modal-impact');openSwapModal('${pieceId}')">Continue to Swap</button>`;
   }
-
   openModal('modal-impact');
 }
 
-// ─────────────────────────────────────────────────────────────
-// SWAP / UPGRADE FLOW
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Open the Swap/Upgrade modal for a given piece.
- * Shows only pieces of the same type as replacement candidates.
- * @param {string} pieceId
- */
 function openSwapModal(pieceId) {
   const piece = state.pieces.find(p => p.id === pieceId);
   if (!piece) return;
   swappingPieceId = pieceId;
-
-  // Info block about the piece being replaced
   document.getElementById('swap-old-piece-info').innerHTML = `
     <div style="padding:10px 14px;background:var(--terracotta-bg);border:1px solid var(--terracotta);border-radius:var(--radius);">
       <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--terracotta);margin-bottom:2px;">Replacing</div>
       <div style="font-family:var(--font-display);font-size:1rem;font-weight:600;color:var(--ink);">${escHtml(piece.name)}</div>
       <div style="font-size:0.78rem;color:var(--ink-light);">${piece.type} · worn ${piece.wearCount || 0}× · in ${state.outfits.filter(o=>o.pieces.includes(pieceId)).length} outfits</div>
     </div>`;
-
-  // Populate replacement dropdown — same type, not archived, not this piece
   const candidates = state.pieces.filter(p => p.type === piece.type && p.id !== pieceId && !p.archived);
   const sel = document.getElementById('swap-replacement-select');
   sel.innerHTML = '<option value="">— choose replacement piece —</option>'
-    + candidates.map(p => `<option value="${p.id}">${escHtml(p.name)}${p.tags.length ? ' — ' + p.tags.slice(0,3).join(', ') : ''}</option>`).join('');
-
-  // Reset the "create new" toggle
+    + candidates.map(p => `<option value="${p.id}">${escHtml(p.name)}${p.tags.length ? ' — '+p.tags.slice(0,3).join(', ') : ''}</option>`).join('');
   document.getElementById('swap-create-new').checked = false;
   document.getElementById('swap-new-piece-form').style.display = 'none';
   document.getElementById('swap-new-name').value = '';
   document.getElementById('swap-new-qty').value = '1';
   document.getElementById('swap-new-tags').value = '';
   document.getElementById('swap-error').innerHTML = '';
-
   openModal('modal-swap');
 }
 
-/**
- * Toggle visibility of the "create new piece" sub-form in the swap modal.
- */
 function toggleSwapCreateNew() {
   const checked = document.getElementById('swap-create-new').checked;
   document.getElementById('swap-new-piece-form').style.display = checked ? 'block' : 'none';
   document.getElementById('swap-replacement-select').disabled = checked;
 }
 
-/**
- * Execute the swap: archive old piece, set replacedById, update all saved outfits.
- */
-function confirmSwap() {
+async function confirmSwap() {
   const oldPiece = state.pieces.find(p => p.id === swappingPieceId);
   if (!oldPiece) return;
   const errEl = document.getElementById('swap-error');
   const createNew = document.getElementById('swap-create-new').checked;
-
   let newPieceId;
 
   if (createNew) {
-    // Create the new piece from the sub-form
     const name = document.getElementById('swap-new-name').value.trim();
     const qty  = parseInt(document.getElementById('swap-new-qty').value, 10);
     const tags = document.getElementById('swap-new-tags').value
       .split(',').map(t => t.trim().toLowerCase()).filter(Boolean);
-
     if (!name) { errEl.innerHTML = '<div class="alert alert-error">New piece name is required.</div>'; return; }
     if (!qty || qty < 1) { errEl.innerHTML = '<div class="alert alert-error">Quantity must be at least 1.</div>'; return; }
-
     const newPiece = {
-      id:            uid(),
-      name,
-      type:          oldPiece.type, // Same type as the piece being replaced
-      quantity:      qty,
-      tags,
-      archived:      false,
-      wearCount:     0,
-      favoriteCount: 0,
-      replacedById:  null,
-      dateAdded:     new Date().toISOString(),
+      id: uid(), name, type: oldPiece.type, quantity: qty, tags,
+      archived: false, wearCount: 0, favoriteCount: 0, replacedById: null,
+      dateAdded: new Date().toISOString()
     };
-    state.pieces.push(newPiece);
-    registerTags(tags);
+    await registerTags(tags);
+    await DataStore.save('pieces', newPiece);
     newPieceId = newPiece.id;
   } else {
     newPieceId = document.getElementById('swap-replacement-select').value;
     if (!newPieceId) { errEl.innerHTML = '<div class="alert alert-error">Select a replacement piece, or check "create new".</div>'; return; }
   }
 
-  // Archive the old piece and record what replaced it
   oldPiece.archived = true;
   oldPiece.replacedById = newPieceId;
+  await DataStore.save('pieces', oldPiece);
 
-  // Update all saved outfits: replace old piece ID with new piece ID
   let outfitsUpdated = 0;
-  state.outfits.forEach(o => {
+  for (const o of state.outfits) {
     const idx = o.pieces.indexOf(swappingPieceId);
     if (idx > -1) {
       o.pieces[idx] = newPieceId;
+      await DataStore.save('outfits', o);
       outfitsUpdated++;
     }
-  });
+  }
 
-  // Transfer favoriteCount to the new piece (wear history stays on old piece)
   const newPiece = state.pieces.find(p => p.id === newPieceId);
-  if (newPiece) newPiece.favoriteCount = (newPiece.favoriteCount || 0) + (oldPiece.favoriteCount || 0);
+  if (newPiece) {
+    newPiece.favoriteCount = (newPiece.favoriteCount || 0) + (oldPiece.favoriteCount || 0);
+    await DataStore.save('pieces', newPiece);
+  }
 
-  saveState();
+  // Transfer photo if the old piece had one
+  try {
+    const oldPhoto = await PhotoStore.get(swappingPieceId);
+    if (oldPhoto) {
+      await PhotoStore.save(newPieceId, oldPhoto.blob);
+    }
+  } catch(_) {}
+
   closeModal('modal-swap');
   showToast(`Swap complete. ${outfitsUpdated} saved outfit${outfitsUpdated !== 1 ? 's' : ''} updated.`, 'success');
   renderCloset();
@@ -3493,48 +3216,154 @@ function confirmSwap() {
   swappingPieceId = null;
 }
 
-// ─────────────────────────────────────────────────────────────
-// CONFLICT RULES — slot-level tag exclusions based on selections
-// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────
+// CUSTOM STYLE BUILDER
+// ─────────────────────────────────────────────────────────────────────────
+let editingStyleSlots      = [];
+let editingStyleId         = null;
+let styleGlobalExcludeTags = [];
+let editingConflictRules   = [];
 
-/**
- * State for conflict rules in the style builder.
- * Each rule: { ifSlotIndex: number, ifTag: string, thenExcludeFromSlotIndex: number, thenExcludeTag: string }
- * Meaning: if slot[ifSlotIndex] selected a piece with ifTag,
- *          then exclude pieces with thenExcludeTag from slot[thenExcludeFromSlotIndex].
- *
- * Note: These are stored on the style object as style.conflictRules[].
- * The generator applies them in Block D after each piece is picked.
- */
-let editingConflictRules = []; // conflict rules for the style currently being built
+function openAddStyle() {
+  editingStyleId = null;
+  editingStyleSlots = [
+    { type: 'top',    required: true,  requiredTags: [], excludedTags: [], count: 1 },
+    { type: 'bottom', required: true,  requiredTags: [], excludedTags: [], count: 1 },
+  ];
+  styleGlobalExcludeTags = [];
+  editingConflictRules   = [];
+  document.getElementById('modal-style-title').textContent = 'Add Custom Style';
+  document.getElementById('field-style-name').value = '';
+  document.getElementById('style-form-error').innerHTML = '';
+  renderSlotBuilder();
+  renderStyleGlobalExcludePills();
+  renderConflictRules();
+  openModal('modal-style');
+  setTimeout(() => document.getElementById('field-style-name').focus(), 100);
+}
 
-/**
- * Add a blank conflict rule to the current style being edited.
- */
-function addConflictRule() {
-  if (editingStyleSlots.length < 2) {
-    showToast('Add at least 2 slots before creating a conflict rule.', 'warning');
-    return;
+function addSlotRow() {
+  const knownTypes = getAllTypes();
+  editingStyleSlots.push({ type: knownTypes[0] || 'top', required: false, requiredTags: [], excludedTags: [], count: 1 });
+  renderSlotBuilder();
+}
+
+function removeSlotRow(index) {
+  editingStyleSlots.splice(index, 1);
+  renderSlotBuilder();
+}
+
+function renderSlotBuilder() {
+  const container  = document.getElementById('slot-builder');
+  const knownTypes = getAllTypes();
+  container.innerHTML = editingStyleSlots.map((slot, i) => {
+    const typeOptions = knownTypes.map(t =>
+      `<option value="${t}" ${slot.type === t ? 'selected' : ''}>${t.charAt(0).toUpperCase()+t.slice(1)}</option>`
+    ).join('');
+    const reqPills = slot.requiredTags.map(t =>
+      `<span class="tag-pill" style="font-size:0.7rem;">${escHtml(t)}<button class="tag-pill-remove" type="button" onclick="removeSlotTag(${i},'required','${escHtml(t)}')">×</button></span>`
+    ).join('');
+    const exclPills = slot.excludedTags.map(t =>
+      `<span class="tag-pill" style="font-size:0.7rem;background:var(--terracotta-bg);border-color:var(--terracotta);color:var(--terracotta);">${escHtml(t)}<button class="tag-pill-remove" type="button" onclick="removeSlotTag(${i},'excluded','${escHtml(t)}')">×</button></span>`
+    ).join('');
+    return `<div class="slot-row">
+      <div><div class="slot-row-label">Type</div>
+        <select class="form-control" style="font-size:0.82rem;" onchange="updateSlotType(${i}, this.value)">${typeOptions}</select>
+      </div>
+      <div><div class="slot-row-label">Required?</div>
+        <label class="slot-required-toggle">
+          <input type="checkbox" ${slot.required ? 'checked' : ''} onchange="updateSlotRequired(${i}, this.checked)">
+          <span>${slot.required ? 'Required' : 'Optional'}</span>
+        </label>
+      </div>
+      <div style="grid-column:1/-2;margin-top:6px;">
+        <div class="slot-row-label" style="color:var(--sage-dark);">Must have tags</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">${reqPills}
+          <button type="button" class="btn btn-sm" style="font-size:0.72rem;padding:3px 8px;"
+            onclick="showTagPicker(this, editingStyleSlots[${i}].requiredTags, t => { addSlotTagFromPicker(${i},'required',t); })">+ Tag</button>
+        </div>
+      </div>
+      <div style="grid-column:1/-2;margin-top:4px;">
+        <div class="slot-row-label" style="color:var(--terracotta);">Exclude tags</div>
+        <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">${exclPills}
+          <button type="button" class="btn btn-sm" style="font-size:0.72rem;padding:3px 8px;background:var(--terracotta-bg);border-color:var(--terracotta);color:var(--terracotta);"
+            onclick="showTagPicker(this, editingStyleSlots[${i}].excludedTags, t => { addSlotTagFromPicker(${i},'excluded',t); })">+ Tag</button>
+        </div>
+      </div>
+      <div style="align-self:start;padding-top:20px;">
+        <button type="button" class="btn btn-sm btn-danger btn-icon" onclick="removeSlotRow(${i})">✕</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+async function addSlotTagFromPicker(slotIndex, tagType, tag) {
+  const clean = tag.trim().toLowerCase().replace(/\s+/g, '-');
+  if (!clean) return;
+  const arr = tagType === 'required' ? editingStyleSlots[slotIndex].requiredTags : editingStyleSlots[slotIndex].excludedTags;
+  if (!arr.includes(clean)) arr.push(clean);
+  await registerTags([clean]);
+  renderSlotBuilder();
+}
+
+function updateSlotType(index, type) { editingStyleSlots[index].type = type; }
+function updateSlotRequired(index, required) { editingStyleSlots[index].required = required; renderSlotBuilder(); }
+
+async function onSlotTagKeydown(e, slotIndex, tagType) {
+  if (e.key === 'Enter' || e.key === ',') {
+    e.preventDefault();
+    const val = e.target.value.trim().toLowerCase().replace(/\s+/g, '-');
+    if (!val) return;
+    const arr = tagType === 'required' ? editingStyleSlots[slotIndex].requiredTags : editingStyleSlots[slotIndex].excludedTags;
+    if (!arr.includes(val)) { arr.push(val); await registerTags([val]); }
+    e.target.value = '';
+    renderSlotBuilder();
   }
+}
+
+function removeSlotTag(slotIndex, tagType, tag) {
+  const arr = tagType === 'required' ? editingStyleSlots[slotIndex].requiredTags : editingStyleSlots[slotIndex].excludedTags;
+  const idx = arr.indexOf(tag);
+  if (idx > -1) arr.splice(idx, 1);
+  renderSlotBuilder();
+}
+
+function renderStyleGlobalExcludePills() {
+  const wrap = document.getElementById('style-global-exclude-wrap');
+  if (!wrap) return;
+  wrap.innerHTML = styleGlobalExcludeTags.map(tag =>
+    `<span class="tag-pill" style="background:var(--terracotta-bg);border-color:var(--terracotta);color:var(--terracotta);">
+      ${escHtml(tag)}<button class="tag-pill-remove" type="button" onclick="removeStyleGlobalTag('${escHtml(tag)}')">×</button>
+    </span>`
+  ).join('') || '<span style="font-size:0.78rem;color:var(--ink-light);font-family:var(--font-body);">None — all types eligible</span>';
+}
+
+function addStyleGlobalTag(tag) {
+  const clean = tag.trim().toLowerCase().replace(/\s+/g, '-');
+  if (!clean || styleGlobalExcludeTags.includes(clean)) return;
+  styleGlobalExcludeTags.push(clean);
+  renderStyleGlobalExcludePills();
+}
+
+function removeStyleGlobalTag(tag) {
+  styleGlobalExcludeTags = styleGlobalExcludeTags.filter(t => t !== tag);
+  renderStyleGlobalExcludePills();
+}
+
+// ── Conflict rules ───────────────────────────────────────────────────────
+function addConflictRule() {
+  if (editingStyleSlots.length < 2) { showToast('Add at least 2 slots before creating a conflict rule.', 'warning'); return; }
   editingConflictRules.push({ ifSlotIndex: 0, ifTag: '', thenSlotIndex: 1, thenExcludeTag: '' });
   renderConflictRules();
 }
 
-/**
- * Remove a conflict rule by index.
- * @param {number} index
- */
 function removeConflictRule(index) {
   editingConflictRules.splice(index, 1);
   renderConflictRules();
 }
 
-/**
- * Render the conflict rules section in the style builder modal.
- * Uses picker buttons instead of freehand text for tag selection.
- */
 function renderConflictRules() {
-  let container = document.getElementById('conflict-rules-container');
+  const container = document.getElementById('conflict-rules-container');
   if (!container) return;
   if (editingConflictRules.length === 0) {
     container.innerHTML = '<div style="font-size:0.78rem;color:var(--ink-light);font-family:var(--font-body);padding:4px 0;">No conflict rules. Add one to prevent tag combinations across slots.</div>';
@@ -3554,8 +3383,7 @@ function renderConflictRules() {
           If <select onchange="editingConflictRules[${i}].ifSlotIndex=+this.value;renderConflictRules()" style="font-size:0.8rem;padding:2px 4px;border:1px solid var(--border);border-radius:4px;">
             ${slotLabels.map((l,idx) => `<option value="${idx}" ${rule.ifSlotIndex===idx?'selected':''}>${l}</option>`).join('')}
           </select>
-          picks ${ifTagBtn}
-          → exclude ${thenTagBtn}
+          picks ${ifTagBtn} → exclude ${thenTagBtn}
           from <select onchange="editingConflictRules[${i}].thenSlotIndex=+this.value;renderConflictRules()" style="font-size:0.8rem;padding:2px 4px;border:1px solid var(--border);border-radius:4px;">
             ${slotLabels.map((l,idx) => `<option value="${idx}" ${rule.thenSlotIndex===idx?'selected':''}>${l}</option>`).join('')}
           </select>
@@ -3566,12 +3394,6 @@ function renderConflictRules() {
   </div>`;
 }
 
-/**
- * Open the tag picker for a conflict rule field.
- * @param {number} ruleIndex  Index in editingConflictRules
- * @param {'ifTag'|'thenExcludeTag'} field  Which field to update
- * @param {HTMLElement} anchorEl  Element to anchor picker to
- */
 function pickConflictTag(ruleIndex, field, anchorEl) {
   showTagPicker(anchorEl, [], tag => {
     editingConflictRules[ruleIndex][field] = tag.trim().toLowerCase().replace(/\s+/g, '-');
@@ -3579,282 +3401,24 @@ function pickConflictTag(ruleIndex, field, anchorEl) {
   });
 }
 
-// ─────────────────────────────────────────────────────────────
-// CUSTOM STYLE BUILDER — update to include conflict rules section
-// ─────────────────────────────────────────────────────────────
-// (The openAddStyle and saveCustomStyle functions below replace
-//  the ones added in the previous session, adding conflict rule support)
-// ─────────────────────────────────────────────────────────────
-
-
-
-// State for the style builder modal
-let editingStyleSlots = [];         // Array of slot objects being built
-let editingStyleId    = null;       // null = new style, string = editing existing
-let styleGlobalExcludeTags = [];    // Global exclude tags for the style being built
-
-/**
- * Open the Add Custom Style modal with a blank form.
- */
-function openAddStyle() {
-  editingStyleId = null;
-  editingStyleSlots = [
-    { type: 'top',    required: true,  requiredTags: [], excludedTags: [], count: 1 },
-    { type: 'bottom', required: true,  requiredTags: [], excludedTags: [], count: 1 },
-  ];
-  styleGlobalExcludeTags = [];
-  editingConflictRules = [];
-  document.getElementById('modal-style-title').textContent = 'Add Custom Style';
-  document.getElementById('field-style-name').value = '';
-  document.getElementById('style-form-error').innerHTML = '';
-  renderSlotBuilder();
-  renderStyleGlobalExcludePills();
-  renderConflictRules();
-  openModal('modal-style');
-  setTimeout(() => document.getElementById('field-style-name').focus(), 100);
-}
-
-/**
- * Add a new blank slot row to the style builder.
- */
-function addSlotRow() {
-  const knownTypes = getAllTypes();
-  editingStyleSlots.push({
-    type: knownTypes[0] || 'top',
-    required: false,
-    requiredTags: [],
-    excludedTags: [],
-    count: 1
-  });
-  renderSlotBuilder();
-}
-
-/**
- * Remove a slot row from the style builder.
- * @param {number} index
- */
-function removeSlotRow(index) {
-  editingStyleSlots.splice(index, 1);
-  renderSlotBuilder();
-}
-
-/**
- * Render all slot rows in the style builder modal.
- * Tag inputs replaced with picker buttons — no freehand text entry.
- */
-function renderSlotBuilder() {
-  const container = document.getElementById('slot-builder');
-  const knownTypes = getAllTypes();
-
-  container.innerHTML = editingStyleSlots.map((slot, i) => {
-    const typeOptions = knownTypes.map(t =>
-      `<option value="${t}" ${slot.type === t ? 'selected' : ''}>${t.charAt(0).toUpperCase()+t.slice(1)}</option>`
-    ).join('');
-
-    const reqPills = slot.requiredTags.map(t =>
-      `<span class="tag-pill" style="font-size:0.7rem;">${escHtml(t)}
-        <button class="tag-pill-remove" type="button" onclick="removeSlotTag(${i},'required','${escHtml(t)}')">×</button>
-      </span>`).join('');
-
-    const exclPills = slot.excludedTags.map(t =>
-      `<span class="tag-pill" style="font-size:0.7rem;background:var(--terracotta-bg);border-color:var(--terracotta);color:var(--terracotta);">${escHtml(t)}
-        <button class="tag-pill-remove" type="button" onclick="removeSlotTag(${i},'excluded','${escHtml(t)}')">×</button>
-      </span>`).join('');
-
-    return `<div class="slot-row">
-      <div>
-        <div class="slot-row-label">Type</div>
-        <select class="form-control" style="font-size:0.82rem;" onchange="updateSlotType(${i}, this.value)">
-          ${typeOptions}
-        </select>
-      </div>
-      <div>
-        <div class="slot-row-label">Required?</div>
-        <label class="slot-required-toggle">
-          <input type="checkbox" ${slot.required ? 'checked' : ''} onchange="updateSlotRequired(${i}, this.checked)">
-          <span>${slot.required ? 'Required' : 'Optional'}</span>
-        </label>
-      </div>
-      <div style="grid-column:1/-2;margin-top:6px;">
-        <div class="slot-row-label" style="color:var(--sage-dark);">Must have tags</div>
-        <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
-          ${reqPills}
-          <button type="button" class="btn btn-sm" style="font-size:0.72rem;padding:3px 8px;"
-            onclick="showTagPicker(this, editingStyleSlots[${i}].requiredTags, t => { addSlotTagFromPicker(${i},'required',t); })">+ Tag</button>
-        </div>
-      </div>
-      <div style="grid-column:1/-2;margin-top:4px;">
-        <div class="slot-row-label" style="color:var(--terracotta);">Exclude tags</div>
-        <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">
-          ${exclPills}
-          <button type="button" class="btn btn-sm" style="font-size:0.72rem;padding:3px 8px;background:var(--terracotta-bg);border-color:var(--terracotta);color:var(--terracotta);"
-            onclick="showTagPicker(this, editingStyleSlots[${i}].excludedTags, t => { addSlotTagFromPicker(${i},'excluded',t); })">+ Tag</button>
-        </div>
-      </div>
-      <div style="align-self:start;padding-top:20px;">
-        <button type="button" class="btn btn-sm btn-danger btn-icon" onclick="removeSlotRow(${i})" title="Remove slot">✕</button>
-      </div>
-    </div>`;
-  }).join('');
-}
-
-/**
- * Add a tag to a slot from the picker (called by picker callback).
- * Ensures normalization and re-renders the slot builder.
- * @param {number} slotIndex
- * @param {'required'|'excluded'} tagType
- * @param {string} tag
- */
-function addSlotTagFromPicker(slotIndex, tagType, tag) {
-  const clean = tag.trim().toLowerCase().replace(/\s+/g, '-');
-  if (!clean) return;
-  const arr = tagType === 'required'
-    ? editingStyleSlots[slotIndex].requiredTags
-    : editingStyleSlots[slotIndex].excludedTags;
-  if (!arr.includes(clean)) arr.push(clean);
-  saveState(); // persist any new tags added to registry
-  renderSlotBuilder();
-}
-
-/**
- * Update a slot's type field.
- * @param {number} index
- * @param {string} type
- */
-function updateSlotType(index, type) {
-  editingStyleSlots[index].type = type;
-}
-
-/**
- * Update a slot's required flag.
- * @param {number} index
- * @param {boolean} required
- */
-function updateSlotRequired(index, required) {
-  editingStyleSlots[index].required = required;
-  renderSlotBuilder(); // Re-render to update label text
-}
-
-/**
- * Handle keydown in a slot tag input (required or excluded tags).
- * @param {KeyboardEvent} e
- * @param {number} slotIndex
- * @param {'required'|'excluded'} tagType
- */
-function onSlotTagKeydown(e, slotIndex, tagType) {
-  if (e.key === 'Enter' || e.key === ',') {
-    e.preventDefault();
-    // Normalize: trim, lowercase, collapse whitespace to hyphens
-    const val = e.target.value.trim().toLowerCase().replace(/\s+/g, '-');
-    if (!val) return;
-    const arr = tagType === 'required'
-      ? editingStyleSlots[slotIndex].requiredTags
-      : editingStyleSlots[slotIndex].excludedTags;
-    if (!arr.includes(val)) {
-      arr.push(val);
-      // Register in tag registry so it's available for piece tagging too
-      registerTags([val]);
-    }
-    e.target.value = '';
-    renderSlotBuilder();
-  }
-}
-
-/**
- * Remove a tag from a slot's required or excluded tag list.
- * @param {number} slotIndex
- * @param {'required'|'excluded'} tagType
- * @param {string} tag
- */
-function removeSlotTag(slotIndex, tagType, tag) {
-  const arr = tagType === 'required'
-    ? editingStyleSlots[slotIndex].requiredTags
-    : editingStyleSlots[slotIndex].excludedTags;
-  const idx = arr.indexOf(tag);
-  if (idx > -1) arr.splice(idx, 1);
-  renderSlotBuilder();
-}
-
-// ── Global exclude tags for the style builder ──────────────
-
-function onStyleGlobalTagInput() {
-  const val = document.getElementById('style-global-exclude-field').value.trim().toLowerCase();
-  if (!val) { document.getElementById('style-global-tag-suggestions').style.display = 'none'; return; }
-  const matches = state.tagRegistry.filter(t => t.includes(val) && !styleGlobalExcludeTags.includes(t)).slice(0, 8);
-  const box = document.getElementById('style-global-tag-suggestions');
-  if (matches.length === 0) { box.style.display = 'none'; return; }
-  box.innerHTML = matches.map(t => `<div class="tag-suggestion-item" onmousedown="addStyleGlobalTag('${t}')">${t}</div>`).join('');
-  box.style.display = 'block';
-}
-
-function onStyleGlobalTagKeydown(e) {
-  const val = e.target.value.trim().toLowerCase().replace(/\s+/g, '-');
-  if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); if (val) addStyleGlobalTag(val); }
-  if (e.key === 'Backspace' && !val && styleGlobalExcludeTags.length > 0) {
-    styleGlobalExcludeTags.pop(); renderStyleGlobalExcludePills();
-  }
-  if (e.key === 'Escape') document.getElementById('style-global-tag-suggestions').style.display = 'none';
-}
-
-function addStyleGlobalTag(tag) {
-  const clean = tag.trim().toLowerCase().replace(/\s+/g, '-');
-  if (!clean || styleGlobalExcludeTags.includes(clean)) return;
-  styleGlobalExcludeTags.push(clean);
-  renderStyleGlobalExcludePills();
-}
-
-function renderStyleGlobalExcludePills() {
-  const wrap = document.getElementById('style-global-exclude-wrap');
-  if (!wrap) return;
-  wrap.innerHTML = styleGlobalExcludeTags.map(tag =>
-    `<span class="tag-pill" style="background:var(--terracotta-bg);border-color:var(--terracotta);color:var(--terracotta);">
-      ${escHtml(tag)}
-      <button class="tag-pill-remove" type="button" onclick="removeStyleGlobalTag('${escHtml(tag)}')">×</button>
-    </span>`
-  ).join('') || '<span style="font-size:0.78rem;color:var(--ink-light);font-family:var(--font-body);">None — all types eligible</span>';
-}
-
-function removeStyleGlobalTag(tag) {
-  styleGlobalExcludeTags = styleGlobalExcludeTags.filter(t => t !== tag);
-  renderStyleGlobalExcludePills();
-}
-
-/**
- * Validate and save the custom style from the builder modal.
- */
-function saveCustomStyle() {
-  const name = document.getElementById('field-style-name').value.trim();
+async function saveCustomStyle() {
+  const name  = document.getElementById('field-style-name').value.trim();
   const errEl = document.getElementById('style-form-error');
-
   if (!name) { errEl.innerHTML = '<div class="alert alert-error">Style name is required.</div>'; return; }
   if (editingStyleSlots.length === 0) { errEl.innerHTML = '<div class="alert alert-error">Add at least one slot.</div>'; return; }
-  if (!editingStyleSlots.some(s => s.required)) {
-    errEl.innerHTML = '<div class="alert alert-error">At least one slot must be marked as required.</div>'; return;
-  }
-
-  // Validate conflict rules — both tags must be filled in
+  if (!editingStyleSlots.some(s => s.required)) { errEl.innerHTML = '<div class="alert alert-error">At least one slot must be required.</div>'; return; }
   const badRule = editingConflictRules.find(r => !r.ifTag || !r.thenExcludeTag);
-  if (badRule) {
-    errEl.innerHTML = '<div class="alert alert-error">All conflict rules must have both tags filled in.</div>'; return;
-  }
+  if (badRule) { errEl.innerHTML = '<div class="alert alert-error">All conflict rules must have both tags filled in.</div>'; return; }
 
   const style = {
     id:                editingStyleId || uid(),
-    name,
-    isDefault:         false,
+    name, isDefault:   false,
     slots:             editingStyleSlots.map(s => ({ ...s, requiredTags: [...s.requiredTags], excludedTags: [...s.excludedTags] })),
     globalExcludeTags: [...styleGlobalExcludeTags],
     conflictRules:     editingConflictRules.map(r => ({ ...r })),
   };
 
-  if (editingStyleId) {
-    const idx = state.styles.findIndex(s => s.id === editingStyleId);
-    if (idx > -1) state.styles[idx] = style;
-  } else {
-    state.styles.push(style);
-  }
-
-  saveState();
+  await DataStore.save('styles', style);
   closeModal('modal-style');
   showToast(`Style "${name}" saved!`, 'success');
   selectedStyleId = style.id;
@@ -3862,82 +3426,51 @@ function saveCustomStyle() {
   updateOutfitCountDisplay();
 }
 
-// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────
 // SHARED TAG PICKER
-// A reusable floating dropdown that shows existing tags from the
-// registry and lets the user create a new one inline.
-// Usage: call showTagPicker(anchorEl, currentTags, onSelectFn)
-//   - anchorEl: the button/element to position the picker near
-//   - currentTags: array of tags already applied (excluded from list)
-//   - onSelectFn(tag): called when user picks or creates a tag
-// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────
+let _pickerOnSelect = null;
 
-let _pickerOnSelect = null; // callback stored for the active picker
-
-/**
- * Show the floating tag picker anchored to an element.
- * @param {HTMLElement} anchorEl  Element to position picker below
- * @param {string[]} currentTags  Already-selected tags (hidden in list)
- * @param {function} onSelect     Called with the chosen tag string
- */
 function showTagPicker(anchorEl, currentTags, onSelect) {
-  // Remove any existing picker
   hideTagPicker();
   _pickerOnSelect = onSelect;
-
   const picker = document.createElement('div');
   picker.className = 'tag-picker-dropdown';
   picker.id = 'shared-tag-picker';
-
-  // Position anchored below the trigger element
   const rect = anchorEl.getBoundingClientRect();
   picker.style.top  = (rect.bottom + window.scrollY + 4) + 'px';
   picker.style.left = rect.left + 'px';
-
-  // Search input
   const search = document.createElement('input');
   search.className = 'tag-picker-search';
   search.placeholder = 'Search or type new tag…';
-  search.autofocus = true;
   picker.appendChild(search);
-
-  // List container
   const list = document.createElement('div');
   list.className = 'tag-picker-list';
   picker.appendChild(list);
-
   document.body.appendChild(picker);
 
-  // Render list based on search
   function renderList(query) {
     query = query.trim().toLowerCase().replace(/\s+/g, '-');
-    const available = state.tagRegistry.filter(t =>
-      !currentTags.includes(t) && (!query || t.includes(query))
-    );
-
+    const available = state.tagRegistry.filter(t => !currentTags.includes(t) && (!query || t.includes(query)));
     list.innerHTML = '';
-
     if (available.length === 0 && !query) {
       const empty = document.createElement('div');
       empty.className = 'tag-picker-empty';
       empty.textContent = 'No tags yet — type to create one.';
       list.appendChild(empty);
     }
-
     available.forEach(tag => {
       const item = document.createElement('div');
       item.className = 'tag-picker-item';
       item.textContent = tag;
-      item.onmousedown = (e) => { e.preventDefault(); selectTag(tag); };
+      item.onmousedown = e => { e.preventDefault(); selectTag(tag); };
       list.appendChild(item);
     });
-
-    // Always show "Create new" option if there's a query not already in registry
     if (query && !state.tagRegistry.includes(query) && !currentTags.includes(query)) {
       const createItem = document.createElement('div');
       createItem.className = 'tag-picker-item create-new';
       createItem.textContent = `+ Create "${query}"`;
-      createItem.onmousedown = (e) => {
+      createItem.onmousedown = e => {
         e.preventDefault();
         registerTags([query]);
         selectTag(query);
@@ -3946,10 +3479,7 @@ function showTagPicker(anchorEl, currentTags, onSelect) {
     }
   }
 
-  function selectTag(tag) {
-    if (_pickerOnSelect) _pickerOnSelect(tag);
-    hideTagPicker();
-  }
+  function selectTag(tag) { if (_pickerOnSelect) _pickerOnSelect(tag); hideTagPicker(); }
 
   search.addEventListener('input', () => renderList(search.value));
   search.addEventListener('keydown', e => {
@@ -3958,33 +3488,28 @@ function showTagPicker(anchorEl, currentTags, onSelect) {
       e.preventDefault();
       const q = search.value.trim().toLowerCase().replace(/\s+/g, '-');
       if (!q) return;
-      if (!state.tagRegistry.includes(q)) registerTags([q]);
+      registerTags([q]);
       selectTag(q);
     }
   });
-
   renderList('');
   setTimeout(() => search.focus(), 50);
 }
 
-/** Remove the floating tag picker from the DOM. */
 function hideTagPicker() {
   const existing = document.getElementById('shared-tag-picker');
   if (existing) existing.remove();
   _pickerOnSelect = null;
 }
 
-// Close picker when clicking outside
 document.addEventListener('mousedown', e => {
   const picker = document.getElementById('shared-tag-picker');
   if (picker && !picker.contains(e.target)) hideTagPicker();
 });
 
-// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────
 // TAG MANAGER
-// ─────────────────────────────────────────────────────────────
-
-/** Open the Manage Tags modal. */
+// ─────────────────────────────────────────────────────────────────────────
 function openManageTags() {
   document.getElementById('tag-manager-search').value = '';
   document.getElementById('tag-manager-new').value = '';
@@ -3992,42 +3517,30 @@ function openManageTags() {
   openModal('modal-tags');
 }
 
-/**
- * Create a new tag directly from the tag manager input field.
- * The tag is added to the registry but not applied to any piece yet.
- */
-function createTagFromManager() {
+async function createTagFromManager() {
   const input = document.getElementById('tag-manager-new');
   const val = input.value.trim().toLowerCase().replace(/\s+/g, '-');
   if (!val) { showToast('Enter a tag name.', 'warning'); return; }
   if (state.tagRegistry.includes(val)) { showToast(`"${val}" already exists.`, 'warning'); return; }
-  registerTags([val]);
-  saveState();
+  await registerTags([val]);
   input.value = '';
   renderTagManager();
   showToast(`Tag "${val}" created.`, 'success');
 }
 
-/**
- * Render the tag manager list.
- * Shows each tag, how many pieces use it, and rename/remove controls.
- */
 function renderTagManager() {
   const container = document.getElementById('tag-manager-list');
   const query = document.getElementById('tag-manager-search').value.trim().toLowerCase();
-
   const tags = state.tagRegistry.filter(t => !query || t.includes(query));
-
   if (tags.length === 0) {
     container.innerHTML = `<div style="padding:24px;text-align:center;color:var(--ink-light);font-family:var(--font-body);font-size:0.88rem;">
       ${state.tagRegistry.length === 0 ? 'No tags yet. Tags are created when you add them to pieces.' : 'No tags match your search.'}
     </div>`;
     return;
   }
-
   container.innerHTML = `<div style="background:var(--white);border:1px solid var(--border);border-radius:var(--radius);">
     ${tags.map(tag => {
-      const count = state.pieces.filter(p => p.tags.includes(tag)).length;
+      const count  = state.pieces.filter(p => p.tags.includes(tag)).length;
       const unused = count === 0;
       return `<div class="tag-manager-row">
         <div class="tag-manager-name" onclick="filterByTagAndClose('${tag}')" title="Click to filter closet by this tag">
@@ -4036,177 +3549,287 @@ function renderTagManager() {
           ${unused ? '<span style="font-size:0.7rem;color:var(--terracotta);">unused</span>' : ''}
         </div>
         <div class="tag-manager-actions">
-          <button class="btn btn-sm" onclick="openRenameTag('${tag}')" title="Rename tag">Rename</button>
+          <button class="btn btn-sm" onclick="openRenameTag('${tag}')">Rename</button>
           ${unused
-            ? `<button class="btn btn-sm btn-danger" onclick="removeTagFromRegistry('${tag}')" title="Remove tag">Remove</button>`
-            : `<button class="btn btn-sm" style="opacity:0.4;cursor:not-allowed;" title="Tag is in use — remove it from all pieces first" disabled>Remove</button>`
-          }
+            ? `<button class="btn btn-sm btn-danger" onclick="removeTagFromRegistry('${tag}')">Remove</button>`
+            : `<button class="btn btn-sm" style="opacity:0.4;cursor:not-allowed;" disabled>Remove</button>`}
         </div>
       </div>`;
     }).join('')}
   </div>`;
 }
 
-/**
- * Close the tag manager and filter the closet by the selected tag.
- * @param {string} tag
- */
 function filterByTagAndClose(tag) {
   closeModal('modal-tags');
-  // Set search field to the tag and re-render
   document.getElementById('search-input').value = tag;
   switchView('closet');
   renderCloset();
 }
 
-/**
- * Remove a tag from the registry (only if unused).
- * @param {string} tag
- */
-function removeTagFromRegistry(tag) {
+async function removeTagFromRegistry(tag) {
   const count = state.pieces.filter(p => p.tags.includes(tag)).length;
   if (count > 0) { showToast('Cannot remove a tag that is still in use.', 'error'); return; }
   state.tagRegistry = state.tagRegistry.filter(t => t !== tag);
-  saveState();
+  await DataStore.setCollection('tagRegistry', state.tagRegistry);
   renderTagManager();
   showToast(`Tag "${tag}" removed.`, 'success');
 }
 
-/**
- * Rename a tag across all pieces and the registry.
- * @param {string} oldTag
- */
-function openRenameTag(oldTag) {
+async function openRenameTag(oldTag) {
   const newTag = window.prompt(`Rename tag "${oldTag}" to:`, oldTag);
   if (!newTag || newTag.trim() === oldTag) return;
   const clean = newTag.trim().toLowerCase().replace(/\s+/g, '-');
   if (!clean) { showToast('Tag name cannot be empty.', 'error'); return; }
-  if (state.tagRegistry.includes(clean) && clean !== oldTag) {
-    showToast(`Tag "${clean}" already exists.`, 'error'); return;
-  }
-
-  // Update all pieces
-  state.pieces.forEach(p => {
+  if (state.tagRegistry.includes(clean) && clean !== oldTag) { showToast(`Tag "${clean}" already exists.`, 'error'); return; }
+  for (const p of state.pieces) {
     const idx = p.tags.indexOf(oldTag);
-    if (idx > -1) p.tags[idx] = clean;
-  });
-
-  // Update registry
+    if (idx > -1) { p.tags[idx] = clean; await DataStore.save('pieces', p); }
+  }
   const regIdx = state.tagRegistry.indexOf(oldTag);
   if (regIdx > -1) state.tagRegistry[regIdx] = clean;
   state.tagRegistry.sort();
-
-  saveState();
+  await DataStore.setCollection('tagRegistry', state.tagRegistry);
   renderTagManager();
   renderCloset();
   showToast(`Renamed "${oldTag}" → "${clean}" across all pieces.`, 'success');
 }
 
-/**
- * Remove all tags from the registry that no piece uses.
- */
-function pruneUnusedTags() {
+async function pruneUnusedTags() {
   const before = state.tagRegistry.length;
-  state.tagRegistry = state.tagRegistry.filter(t =>
-    state.pieces.some(p => p.tags.includes(t))
-  );
+  state.tagRegistry = state.tagRegistry.filter(t => state.pieces.some(p => p.tags.includes(t)));
   const removed = before - state.tagRegistry.length;
-  saveState();
+  await DataStore.setCollection('tagRegistry', state.tagRegistry);
   renderTagManager();
   showToast(removed > 0 ? `Removed ${removed} unused tag${removed !== 1 ? 's' : ''}.` : 'No unused tags to remove.', 'success');
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// IMPORT / EXPORT
+// ─────────────────────────────────────────────────────────────────────────
+async function handleCsvUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async ev => {
+    const result = parseCsv(ev.target.result);
+    const errEl  = document.getElementById('csv-error');
+    if (result.errors.length > 0) {
+      errEl.innerHTML = `<div class="alert alert-error"><strong>Import errors:</strong><br>${result.errors.map(escHtml).join('<br>')}</div>`;
+    } else { errEl.innerHTML = ''; }
+    if (result.pieces.length > 0) {
+      let added = 0;
+      for (const p of result.pieces) {
+        await DataStore.save('pieces', p);
+        await registerTags(p.tags);
+        added++;
+      }
+      renderCloset();
+      updateHeaderStats();
+      updateOutfitCountDisplay();
+      showToast(`Imported ${added} piece${added !== 1 ? 's' : ''} successfully.`, 'success');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
 
-// ─────────────────────────────────────────────────────────────
+function parseCsv(text) {
+  const lines  = text.trim().split(/\r?\n/).filter(l => l.trim());
+  const errors = [];
+  const pieces = [];
+  if (lines.length < 2) { errors.push('CSV must have a header row and at least one data row.'); return { pieces, errors }; }
+  const headers      = lines[0].split(',').map(h => h.trim().toLowerCase().replace(/"/g, ''));
+  const requiredCols = ['name', 'type', 'quantity'];
+  const missingCols  = requiredCols.filter(c => !headers.includes(c));
+  if (missingCols.length > 0) {
+    errors.push(`Missing required column(s): ${missingCols.join(', ')}. Header must include: name, type, quantity`);
+    return { pieces, errors };
+  }
+  const nameIdx = headers.indexOf('name');
+  const typeIdx = headers.indexOf('type');
+  const qtyIdx  = headers.indexOf('quantity');
+  for (let i = 1; i < lines.length; i++) {
+    const rowNum = i + 1;
+    const cols   = parseCsvLine(lines[i]);
+    const rawName = (cols[nameIdx] || '').trim();
+    const rawType = (cols[typeIdx] || '').trim().toLowerCase().replace(/\s+/g, '-');
+    const rawQty  = (cols[qtyIdx]  || '').trim();
+    const rowErrors = [];
+    if (!rawName) rowErrors.push('name is empty');
+    if (!rawType) rowErrors.push('type is empty');
+    const qty = parseInt(rawQty, 10);
+    if (isNaN(qty) || qty < 1) rowErrors.push(`quantity "${rawQty}" must be a positive integer`);
+    if (rowErrors.length > 0) { errors.push(`Row ${rowNum}: ${rowErrors.join('; ')}`); continue; }
+    if (rawType && !getAllTypes().includes(rawType)) {
+      state.typeRegistry.push(rawType);
+      state.typeRegistry.sort();
+    }
+    const extraTags = headers
+      .filter((h, idx) => !requiredCols.includes(h) && cols[idx] && cols[idx].trim())
+      .map(h => (cols[headers.indexOf(h)] || '').trim().toLowerCase())
+      .filter(Boolean);
+    pieces.push({
+      id: uid(), name: rawName, type: rawType, quantity: qty, tags: extraTags,
+      archived: false, wearCount: 0, favoriteCount: 0, replacedById: null,
+      dateAdded: new Date().toISOString()
+    });
+  }
+  return { pieces, errors };
+}
 
+function parseCsvLine(line) {
+  const result = [];
+  let current = '', inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') { inQuotes = !inQuotes; }
+    else if (ch === ',' && !inQuotes) { result.push(current); current = ''; }
+    else { current += ch; }
+  }
+  result.push(current);
+  return result;
+}
+
+async function handleJsonUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = async ev => {
+    const errEl = document.getElementById('json-error');
+    try {
+      const data = JSON.parse(ev.target.result);
+      await DataStore.import(data);
+      renderCloset();
+      updateHeaderStats();
+      updateOutfitCountDisplay();
+      errEl.innerHTML = '';
+      showToast('Backup merged successfully.', 'success');
+    } catch(err) {
+      errEl.innerHTML = `<div class="alert alert-error">Invalid JSON file. ${escHtml(err.message)}</div>`;
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+async function exportZip() {
+  const data       = await DataStore.export();
+  const csvHeader  = 'name,type,quantity,tags,wearCount,favoriteCount,archived,dateAdded\n';
+  const csvRows    = data.pieces.map(p =>
+    [csvEsc(p.name), p.type, p.quantity, csvEsc(p.tags.join(';')),
+     p.wearCount||0, p.favoriteCount||0, p.archived?'true':'false', p.dateAdded||''].join(',')
+  ).join('\n');
+  downloadText('closet.csv',  csvHeader + csvRows, 'text/csv');
+  setTimeout(() => downloadText('backup.json', JSON.stringify(data, null, 2), 'application/json'), 300);
+  showToast('Downloading closet.csv and backup.json…', 'success');
+}
+
+function downloadText(filename, content, mime) {
+  const blob = new Blob([content], { type: mime });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function csvEsc(val) {
+  const s = String(val || '');
+  return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// DRAG & DROP IMPORT ZONES
+// ─────────────────────────────────────────────────────────────────────────
+function setupDropZone(zoneId, inputId, handler) {
+  const zone = document.getElementById(zoneId);
+  if (!zone) return;
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    const file = e.dataTransfer.files[0];
+    if (!file) return;
+    handler({ target: { files: [file], value: '' } });
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// MODAL HELPERS
+// ─────────────────────────────────────────────────────────────────────────
+function openModal(id) { document.getElementById(id).classList.add('open'); document.body.style.overflow = 'hidden'; }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); document.body.style.overflow = ''; }
+
+document.querySelectorAll('.modal-overlay').forEach(overlay => {
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(overlay.id); });
+});
+
+// ─────────────────────────────────────────────────────────────────────────
+// VIEW SWITCHING
+// ─────────────────────────────────────────────────────────────────────────
 function switchView(viewId) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
   document.getElementById(`view-${viewId}`).classList.add('active');
-
-  // Find and activate the clicked tab
   document.querySelectorAll('.nav-tab').forEach(t => {
     if (t.getAttribute('onclick').includes(`'${viewId}'`)) t.classList.add('active');
   });
-
-  // Trigger view-specific renders
-  if (viewId === 'generator') {
-    renderStyleSelector();
-    updateOutfitCountDisplay();
-    updateSessionBanCount();
-  }
-  if (viewId === 'saved')   renderSavedOutfits();
-  if (viewId === 'history') renderWearHistory();
+  if (viewId === 'generator') { renderStyleSelector(); updateOutfitCountDisplay(); updateSessionBanCount(); }
+  if (viewId === 'saved')     renderSavedOutfits();
+  if (viewId === 'history')   renderWearHistory();
 }
 
-// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────
 // HEADER STATS
-// ─────────────────────────────────────────────────────────────
-
+// ─────────────────────────────────────────────────────────────────────────
 function updateHeaderStats() {
-  document.getElementById('stat-pieces').textContent  = state.pieces.filter(p => !p.archived).length;
-  document.getElementById('stat-outfits').textContent = state.outfits.filter(o => o.saved).length;
+  const pEl = document.getElementById('stat-pieces');
+  const oEl = document.getElementById('stat-outfits');
+  if (pEl) pEl.textContent = state.pieces.filter(p => !p.archived).length;
+  if (oEl) oEl.textContent = state.outfits.filter(o => o.saved).length;
 }
 
-// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────
 // TOAST NOTIFICATIONS
-// ─────────────────────────────────────────────────────────────
-
-/**
- * Show a toast notification.
- * @param {string} msg
- * @param {'success'|'error'|'warning'|''} type
- */
+// ─────────────────────────────────────────────────────────────────────────
 function showToast(msg, type = '') {
   const container = document.getElementById('toast-container');
   const toast     = document.createElement('div');
   toast.className = `toast ${type}`;
   toast.textContent = msg;
   container.appendChild(toast);
-
-  // Trigger animation
-  requestAnimationFrame(() => {
-    requestAnimationFrame(() => toast.classList.add('show'));
-  });
-
-  // Auto-remove after 3s
-  setTimeout(() => {
-    toast.classList.remove('show');
-    setTimeout(() => toast.remove(), 300);
-  }, 3000);
+  requestAnimationFrame(() => requestAnimationFrame(() => toast.classList.add('show')));
+  setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 300); }, 3000);
 }
 
-// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────
 // UTILITY
-// ─────────────────────────────────────────────────────────────
-
-/** Escape HTML special characters to prevent XSS. */
+// ─────────────────────────────────────────────────────────────────────────
 function escHtml(str) {
   return String(str || '')
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
-// ─────────────────────────────────────────────────────────────
-// INIT
-// ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────
+// INIT — async boot sequence
+// ─────────────────────────────────────────────────────────────────────────
+async function init() {
+  // Load all data from the active storage backend into the in-memory state cache
+  await DataStore.load();
 
-/** Boot sequence — load state and render initial UI. */
-function init() {
-  loadState();
+  // Initial UI renders — all synchronous (read from in-memory state)
   renderCloset();
   updateHeaderStats();
   renderStyleSelector();
   updateOutfitCountDisplay();
   updateSessionBanCount();
 
-  // Setup drag and drop zones for import
+  // Wire up drag-and-drop import zones
   setupDropZone('csv-drop-zone',  'csv-file-input',  handleCsvUpload);
   setupDropZone('json-drop-zone', 'json-file-input', handleJsonUpload);
 
-  // Close tag suggestions when clicking outside
+  // Close tag suggestions when clicking outside the tag input
   document.addEventListener('click', e => {
     if (!e.target.closest('.tag-input-container')) hideSuggestions();
   });
