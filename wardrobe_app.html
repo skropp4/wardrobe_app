@@ -9,6 +9,7 @@
 <title>Wardrobe App</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <style>
 /* ═══════════════════════════════════════════════════
    CSS VARIABLES — Naturalist Field Journal palette
@@ -1245,6 +1246,411 @@ select.form-control { cursor: pointer; }
   .outfit-actions .btn-lg { font-size: 0.75rem; }
 }
 
+/* ═══════════════════════════════════════════════════
+   ── OUTFIT GALLERY & FITCHECK ──
+   ═══════════════════════════════════════════════════ */
+.outfit-hero-photo {
+  width: 100%;
+  height: 200px;
+  object-fit: cover;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  cursor: pointer;
+  transition: opacity var(--transition);
+  display: block;
+}
+.outfit-hero-photo:hover { opacity: 0.88; }
+.outfit-hero-wrap {
+  position: relative;
+  margin-bottom: 12px;
+}
+.outfit-hero-badge {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  background: rgba(44,44,30,0.65);
+  color: #F5EFE0;
+  font-size: 0.68rem;
+  font-family: var(--font-body);
+  padding: 3px 8px;
+  border-radius: 20px;
+  pointer-events: none;
+}
+.outfit-add-photo-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  width: 100%;
+  height: 80px;
+  border: 2px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--parchment-dark);
+  color: var(--ink-light);
+  font-size: 0.82rem;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all var(--transition);
+  margin-bottom: 10px;
+}
+.outfit-add-photo-btn:hover {
+  border-color: var(--sage);
+  background: var(--sage-bg);
+  color: var(--sage-dark);
+}
+
+/* Gallery modal grid */
+.gallery-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 8px;
+  margin-bottom: 16px;
+  max-height: 50vh;
+  overflow-y: auto;
+}
+.gallery-thumb-wrap {
+  position: relative;
+  border-radius: var(--radius);
+  overflow: hidden;
+  border: 2px solid var(--border);
+  transition: border-color var(--transition);
+  cursor: pointer;
+  aspect-ratio: 1;
+}
+.gallery-thumb-wrap.is-hero { border-color: var(--sage-dark); }
+.gallery-thumb-wrap img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.gallery-thumb-actions {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: rgba(44,44,30,0.6);
+  opacity: 0;
+  transition: opacity var(--transition);
+  justify-content: center;
+}
+.gallery-thumb-wrap:hover .gallery-thumb-actions { opacity: 1; }
+.gallery-thumb-btn {
+  font-size: 0.65rem;
+  padding: 2px 6px;
+  border-radius: 3px;
+  border: none;
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-weight: 500;
+}
+.gallery-thumb-hero-btn { background: var(--sage-light); color: var(--sage-dark); }
+.gallery-thumb-del-btn  { background: var(--terracotta-light); color: var(--terracotta); }
+.gallery-hero-star {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  font-size: 0.75rem;
+  background: var(--sage-dark);
+  color: #fff;
+  border-radius: 3px;
+  padding: 1px 4px;
+}
+
+/* Wear entry photo strip */
+.wear-photo-strip {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 8px;
+}
+.wear-photo-thumb {
+  width: 64px;
+  height: 64px;
+  object-fit: cover;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+
+/* Fitcheck prompt modal */
+.fitcheck-prompt {
+  text-align: center;
+  padding: 8px 0 4px;
+}
+.fitcheck-prompt-text {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+.fitcheck-prompt-sub {
+  font-size: 0.85rem;
+  color: var(--ink-light);
+  font-family: var(--font-body);
+  margin-bottom: 20px;
+}
+
+@media (max-width: 480px) {
+  .gallery-grid { grid-template-columns: repeat(auto-fill, minmax(90px, 1fr)); }
+  .outfit-hero-photo { height: 160px; }
+}
+
+/* ═══════════════════════════════════════════════════
+   ── STYLE BUILDER GRID ──
+   ═══════════════════════════════════════════════════ */
+
+/* Column header row */
+.sb-col-headers {
+  display: grid;
+  grid-template-columns: 22px repeat(3, 1fr);
+  gap: 5px;
+  margin-bottom: 3px;
+}
+.sb-col-lbl {
+  font-size: 0.68rem;
+  text-align: center;
+  color: var(--ink-light);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  font-family: var(--font-body);
+}
+
+/* Main builder grid */
+.sb-grid {
+  display: grid;
+  grid-template-columns: 22px repeat(3, 1fr);
+  gap: 5px;
+  margin-bottom: 12px;
+}
+.sb-row-lbl {
+  font-size: 0.65rem;
+  color: var(--ink-light);
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-family: var(--font-body);
+}
+
+/* Empty cell */
+.sb-cell-empty {
+  min-height: 68px;
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius);
+  background: var(--parchment);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color var(--transition), background var(--transition);
+  font-family: var(--font-body);
+}
+.sb-cell-empty:hover {
+  border-color: var(--sage);
+  background: var(--sage-bg);
+}
+.sb-cell-empty .sb-plus {
+  font-size: 1.1rem;
+  color: var(--border);
+  line-height: 1;
+  margin-bottom: 2px;
+}
+.sb-cell-empty .sb-add-lbl {
+  font-size: 0.65rem;
+  color: var(--ink-light);
+}
+
+/* Filled cell */
+.sb-cell-filled {
+  min-height: 68px;
+  border-radius: var(--radius);
+  padding: 6px 7px;
+  cursor: pointer;
+  transition: filter var(--transition);
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  border: 1.5px solid transparent;
+  font-family: var(--font-body);
+}
+.sb-cell-filled:hover { filter: brightness(0.95); }
+.sb-cell-filled.sb-active { outline: 2px solid var(--navy); outline-offset: 2px; }
+.sb-cell-drag-over { outline: 2px dashed var(--sage-dark) !important; outline-offset: 2px; }
+.sb-drag-handle {
+  position: absolute;
+  top: 3px;
+  left: 4px;
+  font-size: 0.7rem;
+  opacity: 0.35;
+  cursor: grab;
+  line-height: 1;
+}
+.sb-cell-type {
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.2;
+  margin-bottom: 2px;
+}
+.sb-cell-badge {
+  font-size: 0.62rem;
+  padding: 1px 5px;
+  border-radius: 8px;
+  background: rgba(0,0,0,0.1);
+  display: inline-block;
+  margin-bottom: 2px;
+  opacity: 0.75;
+}
+.sb-cell-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  margin-top: 2px;
+}
+.sb-mini-tag {
+  font-size: 0.6rem;
+  padding: 0px 4px;
+  border-radius: 6px;
+  background: rgba(0,0,0,0.1);
+}
+
+/* Inline popover */
+.sb-popover {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 14px;
+  background: var(--white);
+  margin-bottom: 12px;
+  box-shadow: var(--shadow);
+}
+.sb-popover-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  justify-content: space-between;
+}
+.sb-popover-title {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--ink);
+}
+.sb-cell-pos-badge {
+  font-size: 0.72rem;
+  padding: 2px 8px;
+  background: var(--parchment-dark);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--ink-light);
+  font-family: var(--font-body);
+}
+.sb-popover-footer {
+  display: flex;
+  gap: 6px;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-light);
+}
+
+/* Meta section (global excludes + conflict rules) */
+.sb-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-light);
+  margin-bottom: 12px;
+}
+.sb-meta-section {}
+.sb-meta-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-height: 28px;
+  align-items: center;
+}
+
+/* ═══════════════════════════════════════════════════
+   ── OUTFIT PREVIEW GRID ──
+   ═══════════════════════════════════════════════════ */
+.outfit-preview-grid-wrap {
+  display: grid;
+  gap: 5px;
+}
+.preview-slot-cell {
+  border-radius: var(--radius);
+  min-height: 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 6px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+}
+.preview-slot-cell.has-photo img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.preview-slot-cell.has-photo .preview-slot-label {
+  position: relative;
+  z-index: 1;
+  background: rgba(44,44,30,0.55);
+  color: var(--parchment);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.68rem;
+  font-family: var(--font-body);
+}
+.preview-slot-name {
+  font-family: var(--font-display);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--ink);
+  line-height: 1.3;
+  margin-bottom: 2px;
+}
+.preview-slot-type {
+  font-size: 0.62rem;
+  color: var(--ink-light);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-family: var(--font-body);
+}
+.preview-slot-skipped {
+  font-size: 0.68rem;
+  color: var(--ink-light);
+  font-style: italic;
+  font-family: var(--font-body);
+}
+
+/* Slot colors — tinted backgrounds for preview cells */
+.preview-color-0 { background: #EEF5E8; border: 1px solid #B8C8A8; }
+.preview-color-1 { background: #E6F1FB; border: 1px solid #B5D4F4; }
+.preview-color-2 { background: #FFF8E7; border: 1px solid #FAC775; }
+.preview-color-3 { background: #FAF0ED; border: 1px solid #F5C4B3; }
+.preview-color-4 { background: #EDE6D5; border: 1px solid #C8B89A; }
+
+/* Toggle button active state */
+.view-toggle-active {
+  background: var(--sage-dark) !important;
+  color: var(--white) !important;
+}
+
 </style>
 </head>
 <body>
@@ -1333,13 +1739,26 @@ select.form-control { cursor: pointer; }
           <div class="generator-panel-title">Outfit Count</div>
           <div id="outfit-count-display" style="font-family:var(--font-display);font-size:1.6rem;font-weight:700;color:var(--sage-dark);line-height:1.1;">—</div>
           <div style="font-size:0.75rem;color:var(--ink-light);font-family:var(--font-body);margin-top:4px;" id="outfit-count-formula">Select a style to calculate</div>
+          <div style="margin-top:12px;padding-top:10px;border-top:1px solid var(--border-light);display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-size:0.75rem;color:var(--ink-light);font-family:var(--font-body);">Saved outfits</span>
+            <span style="font-family:var(--font-display);font-size:1.1rem;font-weight:700;color:var(--ink-mid);" id="generator-saved-count">0</span>
+          </div>
         </div>
 
       </div>
 
       <!-- Right: Current outfit display -->
       <div>
-        <div class="generator-panel">
+        <!-- View toggle -->
+        <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;width:fit-content;margin-bottom:10px;">
+          <button class="btn" id="view-toggle-list" style="border:none;border-radius:0;padding:6px 16px;font-size:0.82rem;background:var(--sage-dark);color:var(--white);"
+            onclick="switchOutfitView('list')">List</button>
+          <button class="btn" id="view-toggle-preview" style="border:none;border-radius:0;padding:6px 16px;font-size:0.82rem;"
+            onclick="switchOutfitView('preview')">Preview</button>
+        </div>
+
+        <!-- List view panel -->
+        <div class="generator-panel" id="panel-outfit-list">
           <div class="generator-panel-title">Current Outfit</div>
           <div class="outfit-display" id="outfit-display">
             <div class="outfit-placeholder">
@@ -1347,12 +1766,25 @@ select.form-control { cursor: pointer; }
               <p>Choose a style and tap Generate to build your first outfit.</p>
             </div>
           </div>
-          <div class="outfit-actions" id="outfit-actions" style="display:none;">
-            <button class="btn btn-primary btn-lg" onclick="saveCurrentOutfit()">♡ Save Outfit</button>
-            <button class="btn btn-lg" onclick="generateOutfit()">↻ Reroll</button>
-            <button class="btn btn-lg" onclick="wearCurrentOutfit()" style="background:var(--amber-bg);border-color:var(--amber);color:var(--amber);">👔 Wore This</button>
-            <button class="btn btn-danger btn-lg" onclick="blockCurrentOutfit()">✕ Block This</button>
+        </div>
+
+        <!-- Preview grid panel -->
+        <div class="generator-panel" id="panel-outfit-preview" style="display:none;">
+          <div class="generator-panel-title" id="preview-panel-title">Preview</div>
+          <div id="outfit-preview-grid">
+            <div class="outfit-placeholder">
+              <div style="font-size:2rem;opacity:0.4;">🖼</div>
+              <p>Generate an outfit to see the preview.</p>
+            </div>
           </div>
+        </div>
+
+        <!-- Action buttons — standalone, below both panels -->
+        <div class="outfit-actions" id="outfit-actions" style="display:none;margin-top:10px;">
+          <button class="btn btn-primary btn-lg" onclick="saveCurrentOutfit()">♡ Save Outfit</button>
+          <button class="btn btn-lg" onclick="generateOutfit()">↻ Reroll</button>
+          <button class="btn btn-lg" onclick="wearCurrentOutfit()" style="background:var(--amber-bg);border-color:var(--amber);color:var(--amber);">👔 Wore This</button>
+          <button class="btn btn-danger btn-lg" onclick="blockCurrentOutfit()">✕ Block This</button>
         </div>
       </div>
 
@@ -1383,7 +1815,8 @@ select.form-control { cursor: pointer; }
 
     <div class="card" style="margin-bottom:16px;">
       <h3 style="font-family:var(--font-display);font-size:1rem;font-weight:600;margin-bottom:8px;">Export Wardrobe</h3>
-      <p class="text-muted" style="margin-bottom:14px;">Download your closet and saved outfits as a ZIP file (CSV + JSON).</p>
+      <p class="text-muted" style="margin-bottom:8px;">Download your closet and saved outfits as a ZIP file containing <code>closet.csv</code>, <code>backup.json</code>, and a <code>README.txt</code>.</p>
+      <p class="text-muted" style="margin-bottom:14px;font-size:0.78rem;">⚠ Photos are stored separately in your browser and are not included in the ZIP. They are device-specific and cannot be exported at this time.</p>
       <button class="btn btn-primary" onclick="exportZip()">⬇ Download ZIP</button>
     </div>
 
@@ -1500,7 +1933,7 @@ select.form-control { cursor: pointer; }
 
 <!-- Custom Style Builder Modal -->
 <div class="modal-overlay" id="modal-style">
-  <div class="modal" style="max-width:580px;">
+  <div class="modal" style="max-width:600px;">
     <h2 class="modal-title" id="modal-style-title">Add Custom Style</h2>
 
     <div class="form-group">
@@ -1508,43 +1941,48 @@ select.form-control { cursor: pointer; }
       <input class="form-control" id="field-style-name" type="text" placeholder="e.g. Summer Casual, Smart Weekend…">
     </div>
 
-    <div style="margin-bottom:6px;">
-      <div class="form-label" style="display:flex;justify-content:space-between;align-items:center;">
-        <span>Slots <span class="required">*</span></span>
-        <button type="button" class="btn btn-sm" onclick="addSlotRow()">+ Add Slot</button>
-      </div>
-      <div style="font-size:0.75rem;color:var(--ink-light);font-family:var(--font-body);margin-bottom:8px;">
-        Each slot picks one piece from that type. Required slots must have a match or generation stops.
-      </div>
-      <div class="slot-builder" id="slot-builder">
-        <!-- slot rows injected here -->
-      </div>
+    <!-- Grid column headers -->
+    <div class="sb-col-headers">
+      <div></div>
+      <div class="sb-col-lbl">Col 1</div>
+      <div class="sb-col-lbl">Col 2</div>
+      <div class="sb-col-lbl">Col 3</div>
     </div>
 
-    <div class="form-group" style="margin-top:4px;">
-      <label class="form-label">Globally Exclude Tags</label>
-      <div style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;padding:8px 10px;background:var(--white);border:1px solid var(--border);border-radius:var(--radius);min-height:40px;" id="style-global-exclude-wrap">
-        <!-- global exclude tag pills injected here -->
-      </div>
-      <div style="margin-top:6px;">
-        <button type="button" class="btn btn-sm" style="font-size:0.78rem;"
-          onclick="showTagPicker(this, styleGlobalExcludeTags, t => { addStyleGlobalTag(t); })">+ Add Excluded Tag</button>
-      </div>
-      <div style="font-size:0.75rem;color:var(--ink-light);font-family:var(--font-body);margin-top:4px;">
-        Pieces with any of these tags will never be selected for this style.
-      </div>
+    <!-- The 5×3 slot grid -->
+    <div class="sb-grid" id="sb-grid">
+      <!-- injected by renderStyleGrid() -->
     </div>
 
-    <div class="form-group" style="margin-top:4px;">
-      <div class="form-label" style="display:flex;justify-content:space-between;align-items:center;">
-        <span>Conflict Rules</span>
-        <button type="button" class="btn btn-sm" onclick="addConflictRule()">+ Add Rule</button>
+    <!-- Inline slot popover -->
+    <div class="sb-popover" id="sb-popover" style="display:none;">
+      <!-- injected by renderSlotPopover() -->
+    </div>
+
+    <!-- Global excludes + conflict rules (always visible below grid) -->
+    <div class="sb-meta" id="sb-meta">
+      <div class="sb-meta-section">
+        <div class="form-label" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span>Globally Exclude Tags</span>
+          <button type="button" class="btn btn-sm" style="font-size:0.75rem;"
+            onclick="showTagPicker(this, styleGlobalExcludeTags, t => { addStyleGlobalTag(t); })">+ Tag</button>
+        </div>
+        <div class="sb-meta-pills" id="style-global-exclude-wrap">
+          <!-- pills injected by renderStyleGlobalExcludePills() -->
+        </div>
+        <div style="font-size:0.72rem;color:var(--ink-light);font-family:var(--font-body);margin-top:4px;">
+          Pieces with any of these tags are excluded from this style entirely.
+        </div>
       </div>
-      <div style="font-size:0.75rem;color:var(--ink-light);font-family:var(--font-body);margin-bottom:6px;">
-        Prevent a tag in one slot from pairing with a tag in another. Example: if Slot 1 picks "t-shirt", exclude "t-shirt" from Slot 2.
-      </div>
-      <div id="conflict-rules-container">
-        <div style="font-size:0.78rem;color:var(--ink-light);font-family:var(--font-body);">No conflict rules yet.</div>
+      <div class="sb-meta-section">
+        <div class="form-label" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">
+          <span>Conflict Rules</span>
+          <button type="button" class="btn btn-sm" style="font-size:0.75rem;" onclick="addConflictRule()">+ Add Rule</button>
+        </div>
+        <div style="font-size:0.72rem;color:var(--ink-light);font-family:var(--font-body);margin-bottom:6px;">
+          Prevent a tag in one slot from pairing with a tag in another slot.
+        </div>
+        <div id="conflict-rules-container"></div>
       </div>
     </div>
 
@@ -1573,6 +2011,40 @@ select.form-control { cursor: pointer; }
     <div class="modal-footer">
       <button class="btn" onclick="closeModal('modal-log-wear')">Cancel</button>
       <button class="btn btn-primary" onclick="confirmLogWear()" style="background:var(--amber);border-color:var(--amber);">Log as Worn</button>
+    </div>
+  </div>
+</div>
+
+<!-- Mark as Worn — Note Modal (replaces window.prompt) -->
+<div class="modal-overlay" id="modal-mark-worn">
+  <div class="modal" style="max-width:420px;">
+    <h2 class="modal-title" id="modal-mark-worn-title">Mark as Worn</h2>
+    <div id="modal-mark-worn-preview" style="margin-bottom:14px;font-size:0.88rem;color:var(--ink-mid);font-family:var(--font-body);"></div>
+    <div class="form-group">
+      <label class="form-label">Note <span style="font-weight:400;text-transform:none;letter-spacing:0;">(optional)</span></label>
+      <textarea class="history-note-input" id="field-mark-worn-note" rows="3"
+        placeholder="e.g. 85°F and sunny, wore to dinner…"></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-mark-worn')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmMarkAsWorn()" style="background:var(--amber);border-color:var(--amber);">Mark as Worn</button>
+    </div>
+  </div>
+</div>
+
+<!-- Rename Tag Modal (replaces window.prompt) -->
+<div class="modal-overlay" id="modal-rename-tag">
+  <div class="modal" style="max-width:380px;">
+    <h2 class="modal-title">Rename Tag</h2>
+    <div class="form-group">
+      <label class="form-label">New name</label>
+      <input class="form-control" id="field-rename-tag-value" type="text"
+        onkeydown="if(event.key==='Enter'){event.preventDefault();confirmRenameTag();}">
+    </div>
+    <div id="rename-tag-error" style="margin-top:-8px;margin-bottom:8px;"></div>
+    <div class="modal-footer">
+      <button class="btn" onclick="closeModal('modal-rename-tag')">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmRenameTag()">Rename</button>
     </div>
   </div>
 </div>
@@ -1677,6 +2149,42 @@ select.form-control { cursor: pointer; }
   </div>
 </div>
 
+<!-- Fitcheck Photo Prompt Modal -->
+<div class="modal-overlay" id="modal-fitcheck-prompt">
+  <div class="modal" style="max-width:400px;">
+    <div class="fitcheck-prompt">
+      <div class="fitcheck-prompt-text">Recorded! 📸</div>
+      <div class="fitcheck-prompt-sub">Want to add a fit check photo?</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <label class="outfit-add-photo-btn" style="height:60px;">
+          📷 Add fit check photo(s)
+          <input type="file" id="fitcheck-file-input" accept="image/*" multiple style="display:none"
+            onchange="handleFitcheckFiles(this.files)">
+        </label>
+        <button class="btn" onclick="closeFitcheckPrompt()">Skip for now</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Outfit Gallery Modal -->
+<div class="modal-overlay" id="modal-outfit-gallery">
+  <div class="modal" style="max-width:560px;">
+    <h2 class="modal-title" id="gallery-modal-title">Fit Check Gallery</h2>
+    <div id="gallery-grid-container" class="gallery-grid"></div>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <label class="outfit-add-photo-btn" style="flex:1;height:48px;margin-bottom:0;">
+        + Add more photos
+        <input type="file" id="gallery-add-input" accept="image/*" multiple style="display:none"
+          onchange="handleGalleryAddFiles(this.files)">
+      </label>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="closeModal('modal-outfit-gallery')">Done</button>
+    </div>
+  </div>
+</div>
+
 <!-- Toast container -->
 <div class="toast-container" id="toast-container"></div>
 
@@ -1713,9 +2221,9 @@ const DEFAULT_STYLES = [
     name: 'Everyday',
     isDefault: true,
     slots: [
-      { type: 'top',    required: true,  requiredTags: [], excludedTags: [], count: 1 },
-      { type: 'bottom', required: true,  requiredTags: [], excludedTags: [], count: 1 },
-      { type: 'shoes',  required: false, requiredTags: [], excludedTags: [], count: 1 },
+      { type: 'top',    required: true,  requiredTags: [], excludedTags: [], count: 1, row: 1, col: 2 },
+      { type: 'bottom', required: true,  requiredTags: [], excludedTags: [], count: 1, row: 3, col: 2 },
+      { type: 'shoes',  required: false, requiredTags: [], excludedTags: [], count: 1, row: 4, col: 2 },
     ],
     globalExcludeTags: [],
     conflictRules: []
@@ -1725,10 +2233,10 @@ const DEFAULT_STYLES = [
     name: 'Layered',
     isDefault: true,
     slots: [
-      { type: 'top',    required: true,  requiredTags: [], excludedTags: [], count: 1 },
-      { type: 'jacket', required: false, requiredTags: [], excludedTags: [], count: 1 },
-      { type: 'bottom', required: true,  requiredTags: [], excludedTags: [], count: 1 },
-      { type: 'shoes',  required: false, requiredTags: [], excludedTags: [], count: 1 },
+      { type: 'top',    required: true,  requiredTags: [], excludedTags: [], count: 1, row: 1, col: 2 },
+      { type: 'jacket', required: false, requiredTags: [], excludedTags: [], count: 1, row: 2, col: 2 },
+      { type: 'bottom', required: true,  requiredTags: [], excludedTags: [], count: 1, row: 3, col: 2 },
+      { type: 'shoes',  required: false, requiredTags: [], excludedTags: [], count: 1, row: 4, col: 2 },
     ],
     globalExcludeTags: [],
     conflictRules: []
@@ -2124,7 +2632,55 @@ const PhotoStore = (() => {
   // Replace getURL() body with: return the stored URL from DataStore directly
   // IndexedDB code can then be removed entirely
 
-  return { save, get, getURL, remove, has, allIds };
+  // ── Additional methods used by the outfit gallery ─────────────────────
+
+  // Save a pre-compressed blob under an arbitrary key (not pieceId).
+  // Used by the outfit gallery which has keys like 'outfit-photo-{id}-{photoId}'.
+  async function saveRaw(key, blob) {
+    const db = await _openDB();
+    return new Promise((resolve, reject) => {
+      const tx  = db.transaction(STORE_NAME, 'readwrite');
+      const req = tx.objectStore(STORE_NAME).put({
+        pieceId: key,   // reuse pieceId field as a generic key
+        blob,
+        mimeType: blob.type,
+        savedAt:  new Date().toISOString()
+      });
+      req.onsuccess = () => resolve();
+      req.onerror   = e => reject(e.target.error);
+    });
+  }
+
+  // Get a blob URL for an arbitrary key. Returns null if not found.
+  async function getURLByKey(key) {
+    const db = await _openDB();
+    const record = await new Promise((resolve, reject) => {
+      const tx  = db.transaction(STORE_NAME, 'readonly');
+      const req = tx.objectStore(STORE_NAME).get(key);
+      req.onsuccess = e => resolve(e.target.result || null);
+      req.onerror   = e => reject(e.target.error);
+    });
+    if (!record) return null;
+    return URL.createObjectURL(record.blob);
+  }
+
+  // Delete a record by arbitrary key.
+  async function deleteByKey(key) {
+    const db = await _openDB();
+    return new Promise((resolve, reject) => {
+      const tx  = db.transaction(STORE_NAME, 'readwrite');
+      const req = tx.objectStore(STORE_NAME).delete(key);
+      req.onsuccess = () => resolve();
+      req.onerror   = e => reject(e.target.error);
+    });
+  }
+
+  // Expose the compression function so _savePhotosToGallery can use it directly
+  async function _compress(file) {
+    return _compressImage(file, 600);
+  }
+
+  return { save, get, getURL, remove, has, allIds, saveRaw, getURLByKey, deleteByKey, _compress };
 })();
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -2192,9 +2748,31 @@ function hashOutfit(pieceIds) {
   return [...pieceIds].sort().join('|');
 }
 
-// ─────────────────────────────────────────────────────────────────────────
-// ACTIVE PIECES / STYLE HELPERS
-// ─────────────────────────────────────────────────────────────────────────
+/**
+ * Normalize a type string for comparison.
+ * Strips a trailing 's' so "tops" matches "top", "jackets" matches "jacket" etc.
+ * Only strips the 's' when the result is still a meaningful word (length > 2).
+ * This means "shoes" → "shoe" intentionally; both will match the same pool.
+ * @param {string} type
+ * @returns {string}
+ */
+function normalizeType(type) {
+  if (!type) return '';
+  const t = type.trim().toLowerCase();
+  // Strip trailing 's' if the stem is longer than 2 chars (avoids "as" → "a")
+  return (t.endsWith('s') && t.length > 3) ? t.slice(0, -1) : t;
+}
+
+/**
+ * Check whether two type strings refer to the same category.
+ * "top" === "tops", "jacket" === "jackets", etc.
+ * @param {string} a
+ * @param {string} b
+ * @returns {boolean}
+ */
+function typesMatch(a, b) {
+  return normalizeType(a) === normalizeType(b);
+}
 function activePieces() {
   return state.pieces.filter(p => !p.archived);
 }
@@ -2214,7 +2792,8 @@ function getSelectedStyle() {
 // ─────────────────────────────────────────────────────────────────────────
 function filterSlot(slot, globalExcludeTags) {
   return activePieces().filter(piece => {
-    if (piece.type !== slot.type) return false;
+    // Use typesMatch so "top" and "tops" both qualify for a "top" slot
+    if (!typesMatch(piece.type, slot.type)) return false;
     if (slot.requiredTags.some(t => !piece.tags.includes(t))) return false;
     if (slot.excludedTags.some(t =>  piece.tags.includes(t))) return false;
     if (globalExcludeTags.some(t =>  piece.tags.includes(t))) return false;
@@ -2362,8 +2941,10 @@ function updateOutfitCountDisplay() {
   const { count, formula } = calculateOutfitCount();
   const countEl   = document.getElementById('outfit-count-display');
   const formulaEl = document.getElementById('outfit-count-formula');
+  const savedEl   = document.getElementById('generator-saved-count');
   if (countEl)   countEl.textContent   = count > 0 ? count.toLocaleString() : '—';
   if (formulaEl) formulaEl.textContent = formula || 'Select a style to calculate';
+  if (savedEl)   savedEl.textContent   = state.outfits.filter(o => o.saved && !o.blocked).length;
 }
 
 // ── Save current outfit ─────────────────────────────────────────────────
@@ -2409,6 +2990,7 @@ async function confirmSaveOutfit() {
   closeModal('modal-save-outfit');
   showToast(`"${name}" saved!`, 'success');
   updateHeaderStats();
+  updateOutfitCountDisplay();
   renderSavedOutfits();
 }
 
@@ -2436,6 +3018,7 @@ async function confirmBlock() {
   closeModal('modal-block');
   showToast('Combination permanently blocked. Generating a new outfit…', 'success');
   updateSessionBanCount();
+  updateOutfitCountDisplay();
   await generateOutfit();
 }
 
@@ -2454,6 +3037,20 @@ function wearCurrentOutfit() {
   setTimeout(() => document.getElementById('field-wear-note').focus(), 100);
 }
 
+/**
+ * Find a saved outfit whose piece combination exactly matches the given pieceIds.
+ * Used to auto-link wear history entries to saved outfits at log time.
+ * Comparison is order-independent — both arrays are sorted before comparing.
+ * @param {string[]} pieceIds
+ * @returns {object|null} matching outfit object, or null if none found
+ */
+function findMatchingSavedOutfit(pieceIds) {
+  const hash = [...pieceIds].sort().join('|');
+  return state.outfits.find(o =>
+    o.saved && !o.blocked && [...o.pieces].sort().join('|') === hash
+  ) || null;
+}
+
 async function confirmLogWear() {
   if (!currentOutfit) return;
   const note = document.getElementById('field-wear-note').value.trim();
@@ -2464,33 +3061,95 @@ async function confirmLogWear() {
     if (p) { p.wearCount = (p.wearCount || 0) + 1; await DataStore.save('pieces', p); }
   }
 
-  const outfitName = currentOutfit.slots.filter(s => !s.skipped).map(s => s.piece.name).join(', ');
+  // Check whether this exact piece combination is already a saved outfit.
+  // If so, link the wear entry to it so photos and stats attach correctly.
+  const matchedOutfit = findMatchingSavedOutfit(pieceIds);
+  const outfitId      = matchedOutfit ? matchedOutfit.id : null;
+  const outfitName    = matchedOutfit
+    ? matchedOutfit.name
+    : currentOutfit.slots.filter(s => !s.skipped).map(s => s.piece.name).join(', ');
+
+  // If matched, also increment the saved outfit's wornCount
+  if (matchedOutfit) {
+    matchedOutfit.wornCount = (matchedOutfit.wornCount || 0) + 1;
+    matchedOutfit.lastWornDate = new Date().toISOString().slice(0, 10);
+    await DataStore.save('outfits', matchedOutfit);
+  }
+
   const entry = {
     id: uid(),
     date: new Date().toISOString().slice(0, 10),
-    outfitId: null, outfitName,
-    pieceIds, note: note || null
+    outfitId,   // null if no matching saved outfit exists
+    outfitName,
+    pieceIds,
+    photoIds: [],
+    note: note || null
   };
   await DataStore.save('wearHistory', entry);
 
   closeModal('modal-log-wear');
-  showToast('Outfit logged as worn!', 'success');
   renderCloset();
+  updateHeaderStats();
+  updateOutfitCountDisplay();
+  if (matchedOutfit) renderSavedOutfits();
+
+  // Pass outfitId (may be null) to fitcheck prompt.
+  // If linked, photos go into the outfit gallery. If not, they're entry-standalone.
+  openFitcheckPrompt(outfitId, entry.id);
 }
 
 // ── Saved outfit actions ─────────────────────────────────────────────────
 async function deleteOutfit(outfitId) {
   if (!confirm('Remove this saved outfit?')) return;
+
+  // Clean up all photos in the outfit gallery from IndexedDB
+  const outfit = state.outfits.find(o => o.id === outfitId);
+  if (outfit && outfit.photoMeta) {
+    for (const meta of outfit.photoMeta) {
+      try { await PhotoStore.deleteByKey(outfitPhotoKey(outfitId, meta.id)); } catch(_) {}
+    }
+  }
+
   await DataStore.delete('outfits', outfitId);
   updateHeaderStats();
+  updateOutfitCountDisplay();
   renderSavedOutfits();
   showToast('Outfit removed.', 'success');
 }
 
-async function markAsWorn(outfitId) {
+// Session variable tracking which outfit is being marked as worn
+let _markingWornOutfitId = null;
+
+/**
+ * Open the "Mark as Worn" note modal for a saved outfit.
+ * Replaces the old window.prompt flow.
+ */
+function markAsWorn(outfitId) {
   const outfit = state.outfits.find(o => o.id === outfitId);
   if (!outfit) return;
-  const note = window.prompt('Add a note for today (optional):', '') || null;
+  _markingWornOutfitId = outfitId;
+
+  document.getElementById('modal-mark-worn-title').textContent = `Mark as Worn — ${outfit.name}`;
+  document.getElementById('field-mark-worn-note').value = '';
+  document.getElementById('modal-mark-worn-preview').textContent =
+    `${outfit.pieces.length} piece${outfit.pieces.length !== 1 ? 's' : ''} · worn ${outfit.wornCount || 0}× so far`;
+
+  openModal('modal-mark-worn');
+  setTimeout(() => document.getElementById('field-mark-worn-note').focus(), 100);
+}
+
+/**
+ * Confirm and log the wear from the modal.
+ */
+async function confirmMarkAsWorn() {
+  const outfitId = _markingWornOutfitId;
+  if (!outfitId) return;
+  const note   = document.getElementById('field-mark-worn-note').value.trim() || null;
+  _markingWornOutfitId = null;
+  closeModal('modal-mark-worn');
+
+  const outfit = state.outfits.find(o => o.id === outfitId);
+  if (!outfit) return;
 
   outfit.wornCount = (outfit.wornCount || 0) + 1;
   outfit.lastWornDate = new Date().toISOString().slice(0, 10);
@@ -2506,13 +3165,18 @@ async function markAsWorn(outfitId) {
     date: new Date().toISOString().slice(0, 10),
     outfitId, outfitName: outfit.name,
     pieceIds: [...outfit.pieces],
-    note: note ? note.trim() : null
+    photoIds: [],
+    note
   };
   await DataStore.save('wearHistory', entry);
 
-  showToast('Outfit marked as worn!', 'success');
   renderSavedOutfits();
   renderCloset();
+  updateHeaderStats();
+  updateOutfitCountDisplay();
+
+  // Prompt for a fit check photo
+  openFitcheckPrompt(outfitId, entry.id);
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -2593,6 +3257,7 @@ async function toggleArchive(pieceId) {
   piece.archived = !piece.archived;
   await DataStore.save('pieces', piece);
   showToast(piece.archived ? 'Piece archived.' : 'Piece restored to active closet.', 'success');
+  updateHeaderStats();
   renderCloset();
   updateOutfitCountDisplay();
 }
@@ -2618,7 +3283,9 @@ async function deletePiece(pieceId) {
 
   showToast('Piece permanently deleted.', 'success');
   renderCloset();
+  renderSavedOutfits();
   updateHeaderStats();
+  updateOutfitCountDisplay();
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -2829,24 +3496,159 @@ function selectStyle(styleId) {
   updateOutfitCountDisplay();
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// OUTFIT PREVIEW GRID
+// ─────────────────────────────────────────────────────────────────────────
+
+// Remember which view was last active across generations
+let _outfitView = 'list'; // 'list' | 'preview'
+
+/**
+ * Switch between the text list view and the photo preview grid.
+ * Persists preference so it survives rerolls within a session.
+ * @param {'list'|'preview'} view
+ */
+function switchOutfitView(view) {
+  _outfitView = view;
+  const listPanel    = document.getElementById('panel-outfit-list');
+  const previewPanel = document.getElementById('panel-outfit-preview');
+  const listBtn      = document.getElementById('view-toggle-list');
+  const previewBtn   = document.getElementById('view-toggle-preview');
+
+  if (view === 'list') {
+    listPanel.style.display    = 'block';
+    previewPanel.style.display = 'none';
+    listBtn.classList.add('view-toggle-active');
+    previewBtn.classList.remove('view-toggle-active');
+  } else {
+    listPanel.style.display    = 'none';
+    previewPanel.style.display = 'block';
+    listBtn.classList.remove('view-toggle-active');
+    previewBtn.classList.add('view-toggle-active');
+  }
+}
+
+/**
+ * Render the 5×3 photo preview grid for a generated outfit.
+ * Each slot is placed at its style-defined (row, col) position.
+ * Empty grid positions are invisible. Piece photos load async.
+ * When no photo exists, shows piece name + type in a tinted card.
+ * @param {object|null} outfit  The result from runGeneration(), or null to clear.
+ */
+async function renderOutfitPreviewGrid(outfit) {
+  const container  = document.getElementById('outfit-preview-grid');
+  const titleEl    = document.getElementById('preview-panel-title');
+  if (!container) return;
+
+  if (!outfit || outfit.error) {
+    container.innerHTML = `<div class="outfit-placeholder">
+      <div style="font-size:2rem;opacity:0.4;">🖼</div>
+      <p>Generate an outfit to see the preview.</p>
+    </div>`;
+    return;
+  }
+
+  // Get the active style so we know slot row/col positions
+  const style = getSelectedStyle();
+  if (titleEl && style) titleEl.textContent = `Preview — ${style.name}`;
+
+  // Build a map from slot index → slot result (piece or skipped)
+  // Only include non-skipped slots that have a grid position
+  const positionedSlots = outfit.slots
+    .map((s, i) => {
+      const styleDef = style ? style.slots[i] : null;
+      return {
+        slotResult: s,
+        row: styleDef ? (styleDef.row || null) : null,
+        col: styleDef ? (styleDef.col || null) : null,
+        colorIdx: i % SB_COLORS.length,
+      };
+    })
+    .filter(s => s.row && s.col); // Only render slots with positions
+
+  if (positionedSlots.length === 0) {
+    container.innerHTML = `<div style="padding:16px;text-align:center;color:var(--ink-light);font-family:var(--font-body);font-size:0.85rem;">
+      No grid positions set on this style's slots.<br>
+      <button class="btn btn-sm" style="margin-top:8px;" onclick="openAddStyle()">Edit Style</button>
+    </div>`;
+    return;
+  }
+
+  // Find which rows and cols are actually used — render only those
+  const usedRows = [...new Set(positionedSlots.map(s => s.row))].sort((a,b) => a-b);
+  const GRID_COLS = 3;
+
+  // Build grid HTML — one row per used row, 3 cols each
+  let gridRows = '';
+  for (const r of usedRows) {
+    let rowCells = '';
+    for (let c = 1; c <= GRID_COLS; c++) {
+      const slotData = positionedSlots.find(s => s.row === r && s.col === c);
+      if (!slotData) {
+        rowCells += `<div></div>`; // empty invisible cell
+      } else if (slotData.slotResult.skipped) {
+        rowCells += `<div class="preview-slot-cell preview-color-${slotData.colorIdx % 5}">
+          <div class="preview-slot-skipped">⚠ skipped</div>
+        </div>`;
+      } else {
+        const piece = slotData.slotResult.piece;
+        const photoId = `preview-photo-${piece.id}-${r}-${c}`;
+        rowCells += `<div class="preview-slot-cell preview-color-${slotData.colorIdx % 5}" id="preview-cell-${r}-${c}">
+          <img id="${photoId}" src="" alt="" style="display:none;position:absolute;inset:0;width:100%;height:100%;object-fit:cover;border-radius:var(--radius);">
+          <div class="preview-slot-name" id="preview-name-${r}-${c}">${escHtml(piece.name)}</div>
+          <div class="preview-slot-type">${piece.type}</div>
+        </div>`;
+      }
+    }
+    gridRows += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px;margin-bottom:5px;">${rowCells}</div>`;
+  }
+
+  container.innerHTML = `<div class="outfit-preview-grid-wrap">${gridRows}</div>`;
+
+  // Async: load piece photos into cells
+  for (const slotData of positionedSlots) {
+    if (slotData.slotResult.skipped) continue;
+    const piece   = slotData.slotResult.piece;
+    const { row, col } = slotData;
+    const imgEl   = document.getElementById(`preview-photo-${piece.id}-${row}-${col}`);
+    const nameEl  = document.getElementById(`preview-name-${row}-${col}`);
+    const cellEl  = document.getElementById(`preview-cell-${row}-${col}`);
+    if (!imgEl) continue;
+    try {
+      const url = await PhotoStore.getURL(piece.id);
+      if (url) {
+        imgEl.src     = url;
+        imgEl.style.display = 'block';
+        // Overlay name label when photo is present
+        if (nameEl) nameEl.style.cssText += ';position:relative;z-index:1;background:rgba(44,44,30,0.55);color:var(--parchment);padding:2px 6px;border-radius:4px;font-size:0.68rem;';
+        if (cellEl) cellEl.classList.add('has-photo');
+      }
+    } catch(_) {}
+  }
+}
+
+
 function renderOutfitDisplay(outfit) {
   const display   = document.getElementById('outfit-display');
   const actionsEl = document.getElementById('outfit-actions');
+
   if (!outfit || outfit.error) {
     display.innerHTML = `<div class="outfit-placeholder">
       <div style="font-size:2rem;opacity:0.4;">👔</div>
       <p>Choose a style and tap Generate to build your first outfit.</p>
     </div>`;
     actionsEl.style.display = 'none';
+    renderOutfitPreviewGrid(null);
     return;
   }
+
   const rows = outfit.slots.map(s => {
     if (s.skipped) {
       const reasonMsg = s.skipReason === 'all-filtered'
-        ? '⚠ All options excluded by current filters'
+        ? '\u26a0 All options excluded by current filters'
         : s.skipReason === 'conflict-rule'
-        ? '⚠ Excluded by a conflict rule in this style'
-        : '⚠ No pieces in this category yet';
+        ? '\u26a0 Excluded by a conflict rule in this style'
+        : '\u26a0 No pieces in this category yet';
       return `<div class="outfit-slot">
         <div class="outfit-slot-type">${s.type}</div>
         <div class="outfit-slot-piece">
@@ -2866,8 +3668,277 @@ function renderOutfitDisplay(outfit) {
       </div>
     </div>`;
   }).join('');
+
   display.innerHTML = rows;
   actionsEl.style.display = 'flex';
+
+  // Apply the remembered view toggle state and render preview
+  switchOutfitView(_outfitView);
+  renderOutfitPreviewGrid(outfit);
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// FITCHECK PHOTOS — outfit gallery management
+// ─────────────────────────────────────────────────────────────────────────
+
+// Session state for the active fitcheck prompt / gallery
+let _fitcheckOutfitId = null;  // outfit being photographed
+let _fitcheckEntryId  = null;  // wear history entry being photographed (null = direct add)
+let _galleryOutfitId  = null;  // outfit whose gallery is currently open
+
+/**
+ * Build the PhotoStore key for an outfit gallery photo.
+ * @param {string} outfitId
+ * @param {string} photoId
+ * @returns {string}
+ */
+function outfitPhotoKey(outfitId, photoId) {
+  return `outfit-photo-${outfitId}-${photoId}`;
+}
+
+/**
+ * Open the fitcheck prompt after marking an outfit as worn.
+ * Stores context so handleFitcheckFiles knows where to save.
+ * @param {string} outfitId  null for ad-hoc (generator) wear logs
+ * @param {string} entryId   the wear history entry just created
+ */
+function openFitcheckPrompt(outfitId, entryId) {
+  _fitcheckOutfitId = outfitId;
+  _fitcheckEntryId  = entryId;
+  // Reset the file input so the same file can be re-selected
+  const input = document.getElementById('fitcheck-file-input');
+  if (input) input.value = '';
+  openModal('modal-fitcheck-prompt');
+}
+
+/** Close the fitcheck prompt without adding photos. */
+function closeFitcheckPrompt() {
+  _fitcheckOutfitId = null;
+  _fitcheckEntryId  = null;
+  closeModal('modal-fitcheck-prompt');
+}
+
+/**
+ * Handle file selection from the fitcheck prompt.
+ * Saves each file to the outfit gallery and references from the wear entry.
+ * @param {FileList} files
+ */
+async function handleFitcheckFiles(files) {
+  if (!files || files.length === 0) return;
+  closeModal('modal-fitcheck-prompt');
+
+  const outfitId = _fitcheckOutfitId;
+  const entryId  = _fitcheckEntryId;
+  _fitcheckOutfitId = null;
+  _fitcheckEntryId  = null;
+
+  // If no outfitId (ad-hoc wear log), we still store the photos but
+  // attach them only to the wear history entry — no outfit gallery to update
+  const photoIds = await _savePhotosToGallery(outfitId, entryId, files);
+
+  // Attach photo IDs to the wear history entry
+  if (entryId && photoIds.length > 0) {
+    const entry = state.wearHistory.find(e => e.id === entryId);
+    if (entry) {
+      entry.photoIds = [...(entry.photoIds || []), ...photoIds];
+      await DataStore.save('wearHistory', entry);
+    }
+  }
+
+  showToast(`${photoIds.length} fit check photo${photoIds.length !== 1 ? 's' : ''} saved!`, 'success');
+  renderSavedOutfits();
+  renderWearHistory();
+}
+
+/**
+ * Handle file selection from the gallery "Add more photos" button.
+ * @param {FileList} files
+ */
+async function handleGalleryAddFiles(files) {
+  if (!files || files.length === 0) return;
+  const outfitId = _galleryOutfitId;
+  if (!outfitId) return;
+
+  const photoIds = await _savePhotosToGallery(outfitId, null, files);
+  showToast(`${photoIds.length} photo${photoIds.length !== 1 ? 's' : ''} added to gallery.`, 'success');
+  // Refresh the open gallery
+  await _renderGalleryGrid(outfitId);
+  renderSavedOutfits();
+}
+
+/**
+ * Core photo save routine: compress each file, store in PhotoStore,
+ * add metadata to outfit.photoMeta.
+ * Returns the array of new photo IDs saved.
+ * @param {string|null} outfitId
+ * @param {string|null} wearEntryId
+ * @param {FileList} files
+ * @returns {string[]}
+ */
+async function _savePhotosToGallery(outfitId, wearEntryId, files) {
+  const photoIds = [];
+
+  for (const file of Array.from(files)) {
+    try {
+      const photoId = uid();
+
+      // Always store the blob. The key depends on context:
+      // - If linked to an outfit: store under the outfit gallery key so the
+      //   gallery modal can display it and it persists to the outfit's photo history.
+      // - If standalone (no outfit): store under a per-entry key so the wear
+      //   history entry can still show the photo even without a saved outfit.
+      const key = outfitId
+        ? outfitPhotoKey(outfitId, photoId)
+        : `wear-photo-${wearEntryId}-${photoId}`;
+
+      const blob = await PhotoStore._compress(file);
+      await PhotoStore.saveRaw(key, blob);
+      photoIds.push(photoId);
+
+      // Add to outfit.photoMeta if linked to a saved outfit
+      if (outfitId) {
+        const outfit = state.outfits.find(o => o.id === outfitId);
+        if (outfit) {
+          if (!outfit.photoMeta) outfit.photoMeta = [];
+          outfit.photoMeta.push({
+            id:           photoId,
+            heroSelected: outfit.photoMeta.length === 0, // first ever = hero
+            addedAt:      new Date().toISOString().slice(0, 10),
+            wearEntryId:  wearEntryId || null
+          });
+          await DataStore.save('outfits', outfit);
+        }
+      }
+    } catch(e) {
+      console.error('[Gallery] Failed to save photo:', e);
+      showToast(e.message || 'One photo could not be saved.', 'error');
+    }
+  }
+
+  return photoIds;
+}
+
+/**
+ * Open the full gallery modal for an outfit.
+ * @param {string} outfitId
+ */
+async function openOutfitGallery(outfitId) {
+  const outfit = state.outfits.find(o => o.id === outfitId);
+  if (!outfit) return;
+  _galleryOutfitId = outfitId;
+  document.getElementById('gallery-modal-title').textContent = `${escHtml(outfit.name)} — Gallery`;
+  // Reset the add-more input
+  const addInput = document.getElementById('gallery-add-input');
+  if (addInput) addInput.value = '';
+  openModal('modal-outfit-gallery');
+  await _renderGalleryGrid(outfitId);
+}
+
+/**
+ * Render the gallery grid inside the gallery modal.
+ * Loads each photo blob from PhotoStore asynchronously.
+ * @param {string} outfitId
+ */
+async function _renderGalleryGrid(outfitId) {
+  const outfit    = state.outfits.find(o => o.id === outfitId);
+  const container = document.getElementById('gallery-grid-container');
+  if (!outfit || !outfit.photoMeta || outfit.photoMeta.length === 0) {
+    container.innerHTML = `<div style="grid-column:1/-1;padding:24px;text-align:center;color:var(--ink-light);font-family:var(--font-body);font-size:0.88rem;">
+      No photos yet. Add your first fit check!
+    </div>`;
+    return;
+  }
+
+  // Build placeholder grid immediately, then fill in images async
+  container.innerHTML = outfit.photoMeta.map(meta =>
+    `<div class="gallery-thumb-wrap${meta.heroSelected ? ' is-hero' : ''}" id="gthumb-${meta.id}">
+      <img src="" alt="fit check photo" style="opacity:0;transition:opacity 0.2s;">
+      ${meta.heroSelected ? '<span class="gallery-hero-star">★ hero</span>' : ''}
+      <div class="gallery-thumb-actions">
+        ${!meta.heroSelected
+          ? `<button class="gallery-thumb-btn gallery-thumb-hero-btn" onclick="setHeroPhoto('${outfitId}','${meta.id}')">Set hero</button>`
+          : ''}
+        <button class="gallery-thumb-btn gallery-thumb-del-btn" onclick="deleteOutfitPhoto('${outfitId}','${meta.id}')">Delete</button>
+      </div>
+    </div>`
+  ).join('');
+
+  // Load each image async
+  for (const meta of outfit.photoMeta) {
+    const key   = outfitPhotoKey(outfitId, meta.id);
+    const imgEl = container.querySelector(`#gthumb-${meta.id} img`);
+    if (!imgEl) continue;
+    try {
+      const url = await PhotoStore.getURLByKey(key);
+      if (url) {
+        imgEl.src = url;
+        imgEl.style.opacity = '1';
+      }
+    } catch(_) {}
+  }
+}
+
+/**
+ * Set a photo as the hero for an outfit.
+ * @param {string} outfitId
+ * @param {string} photoId
+ */
+async function setHeroPhoto(outfitId, photoId) {
+  const outfit = state.outfits.find(o => o.id === outfitId);
+  if (!outfit || !outfit.photoMeta) return;
+  outfit.photoMeta.forEach(m => { m.heroSelected = (m.id === photoId); });
+  await DataStore.save('outfits', outfit);
+  await _renderGalleryGrid(outfitId);
+  renderSavedOutfits();
+  showToast('Hero photo updated.', 'success');
+}
+
+/**
+ * Delete a single photo from an outfit gallery.
+ * Also removes the photo ID from any wear history entries that reference it.
+ * @param {string} outfitId
+ * @param {string} photoId
+ */
+async function deleteOutfitPhoto(outfitId, photoId) {
+  if (!confirm('Delete this photo? This cannot be undone.')) return;
+  const outfit = state.outfits.find(o => o.id === outfitId);
+  if (!outfit || !outfit.photoMeta) return;
+
+  // Remove from PhotoStore
+  const key = outfitPhotoKey(outfitId, photoId);
+  try { await PhotoStore.deleteByKey(key); } catch(_) {}
+
+  // Remove from photoMeta — if it was the hero, promote next photo
+  outfit.photoMeta = outfit.photoMeta.filter(m => m.id !== photoId);
+  if (outfit.photoMeta.length > 0 && !outfit.photoMeta.some(m => m.heroSelected)) {
+    outfit.photoMeta[0].heroSelected = true;
+  }
+  await DataStore.save('outfits', outfit);
+
+  // Remove photoId reference from any wear history entries
+  for (const entry of state.wearHistory) {
+    if (entry.photoIds && entry.photoIds.includes(photoId)) {
+      entry.photoIds = entry.photoIds.filter(id => id !== photoId);
+      await DataStore.save('wearHistory', entry);
+    }
+  }
+
+  await _renderGalleryGrid(outfitId);
+  renderSavedOutfits();
+  showToast('Photo deleted.', 'success');
+}
+
+/**
+ * Add photos directly to an outfit from the saved outfits tab
+ * (not via a wear log).
+ * @param {string} outfitId
+ * @param {FileList} files
+ */
+async function addPhotosToOutfit(outfitId, files) {
+  if (!files || files.length === 0) return;
+  const photoIds = await _savePhotosToGallery(outfitId, null, files);
+  showToast(`${photoIds.length} photo${photoIds.length !== 1 ? 's' : ''} added!`, 'success');
+  renderSavedOutfits();
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -2885,6 +3956,8 @@ function renderSavedOutfits() {
     return;
   }
   container.innerHTML = saved.map(o => savedOutfitCardHTML(o)).join('');
+  // Load hero photos asynchronously after the grid is in the DOM
+  loadSavedOutfitPhotos();
 }
 
 function savedOutfitCardHTML(o) {
@@ -2894,8 +3967,27 @@ function savedOutfitCardHTML(o) {
       <span class="saved-outfit-piece-type">${p.type}</span>
       <span>${escHtml(p.name)}</span>
     </div>`).join('');
-  const lastWorn = o.lastWornDate ? `Last worn: ${o.lastWornDate}` : 'Not yet worn';
-  return `<div class="saved-outfit-card">
+  const lastWorn    = o.lastWornDate ? `Last worn: ${o.lastWornDate}` : 'Not yet worn';
+  const photoMeta   = o.photoMeta || [];
+  const heroMeta    = photoMeta.find(m => m.heroSelected) || photoMeta[0] || null;
+  const photoCount  = photoMeta.length;
+
+  // Hero photo section — placeholder shown immediately, image loaded async
+  const heroSection = heroMeta
+    ? `<div class="outfit-hero-wrap">
+        <img class="outfit-hero-photo" id="outfit-hero-${o.id}"
+          src="" alt="${escHtml(o.name)} fit check"
+          onclick="openOutfitGallery('${o.id}')">
+        <span class="outfit-hero-badge">${photoCount} photo${photoCount !== 1 ? 's' : ''} · tap to view all</span>
+      </div>`
+    : `<label class="outfit-add-photo-btn">
+        📷 Add first fit check photo
+        <input type="file" accept="image/*" multiple style="display:none"
+          onchange="addPhotosToOutfit('${o.id}', this.files)">
+      </label>`;
+
+  return `<div class="saved-outfit-card" id="outfit-card-${o.id}">
+    ${heroSection}
     <div class="saved-outfit-header">
       <div class="saved-outfit-name">${escHtml(o.name)}</div>
       <div class="saved-outfit-meta">
@@ -2906,9 +3998,32 @@ function savedOutfitCardHTML(o) {
     <div class="saved-outfit-pieces">${pieceRows}</div>
     <div class="saved-outfit-actions">
       <button class="btn btn-sm btn-primary" onclick="markAsWorn('${o.id}')">Mark as Worn</button>
+      ${heroMeta
+        ? `<button class="btn btn-sm" onclick="openOutfitGallery('${o.id}')">📷 Gallery (${photoCount})</button>`
+        : ''}
       <button class="btn btn-sm btn-danger" onclick="deleteOutfit('${o.id}')">Remove</button>
     </div>
   </div>`;
+}
+
+// After rendering saved outfits, load hero photos async
+async function loadSavedOutfitPhotos() {
+  const saved = state.outfits.filter(o => o.saved && !o.blocked);
+  for (const o of saved) {
+    const photoMeta = o.photoMeta || [];
+    const heroMeta  = photoMeta.find(m => m.heroSelected) || photoMeta[0] || null;
+    if (!heroMeta) continue;
+    const imgEl = document.getElementById(`outfit-hero-${o.id}`);
+    if (!imgEl) continue;
+    try {
+      const key = outfitPhotoKey(o.id, heroMeta.id);
+      const url = await PhotoStore.getURLByKey(key);
+      if (url) {
+        imgEl.src = url;
+        // No revoke — same reasoning as piece photos on iOS
+      }
+    } catch(_) {}
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -2940,6 +4055,55 @@ function renderWearHistory() {
       ${entries.map(e => historyEntryHTML(e)).join('')}
     </div>`;
   }).join('');
+  // Load wear entry photos async after DOM is ready
+  loadWearEntryPhotos();
+}
+
+/**
+ * Async: load photos for all wear history entries currently in the DOM.
+ * Photos are stored in the outfit gallery and referenced by ID.
+ */
+async function loadWearEntryPhotos() {
+  for (const entry of state.wearHistory) {
+    const photoIds = entry.photoIds || [];
+    for (const pid of photoIds) {
+      const imgEl = document.getElementById(`wear-photo-${entry.id}-${pid}`);
+      if (!imgEl) continue;
+      try {
+        // Determine which key to use:
+        // - If linked to a saved outfit, photo lives in the outfit gallery
+        // - If standalone, photo lives under a per-entry key
+        const key = entry.outfitId
+          ? outfitPhotoKey(entry.outfitId, pid)
+          : `wear-photo-${entry.id}-${pid}`;
+        const url = await PhotoStore.getURLByKey(key);
+        if (url) { imgEl.src = url; imgEl.style.opacity = '1'; }
+      } catch(_) {}
+    }
+  }
+}
+
+/**
+ * Add fitcheck photos to a wear history entry retroactively.
+ * Photos go into the outfit gallery and are referenced from the entry.
+ * @param {string} entryId
+ * @param {string} outfitId
+ * @param {FileList} files
+ */
+async function addFitcheckToEntry(entryId, outfitId, files) {
+  if (!files || files.length === 0) return;
+  // outfitId may arrive as an empty string from the HTML template when null —
+  // normalise it back to null so _savePhotosToGallery routes correctly
+  const resolvedOutfitId = outfitId || null;
+  const photoIds = await _savePhotosToGallery(resolvedOutfitId, entryId, files);
+  const entry = state.wearHistory.find(e => e.id === entryId);
+  if (entry && photoIds.length > 0) {
+    entry.photoIds = [...(entry.photoIds || []), ...photoIds];
+    await DataStore.save('wearHistory', entry);
+  }
+  showToast(`${photoIds.length} photo${photoIds.length !== 1 ? 's' : ''} added!`, 'success');
+  renderWearHistory();
+  if (resolvedOutfitId) renderSavedOutfits();
 }
 
 function historyEntryHTML(entry) {
@@ -2956,12 +4120,36 @@ function historyEntryHTML(entry) {
           placeholder="Add a note about this day…"
           onblur="saveHistoryNote('${entry.id}', this.value)"></textarea>
        </div>`;
+
+  // Photo strip — placeholders rendered immediately, images loaded async
+  const photoIds   = entry.photoIds || [];
+  const photoStrip = photoIds.length > 0
+    ? `<div class="wear-photo-strip" id="wear-strip-${entry.id}">
+        ${photoIds.map(pid =>
+          `<img class="wear-photo-thumb" id="wear-photo-${entry.id}-${pid}"
+            src="" alt="fit check" style="opacity:0;transition:opacity 0.2s;"
+            ${entry.outfitId ? `onclick="openOutfitGallery('${entry.outfitId}')"` : ''}>`
+        ).join('')}
+      </div>`
+    : '';
+
+  // Always show the add-photo button regardless of whether an outfit is linked.
+  // If linked to a saved outfit, photos go into the outfit gallery AND the entry.
+  // If standalone, photos are stored per-entry and visible here only.
+  const addPhotoBtn = `<label class="btn btn-sm" style="cursor:pointer;display:inline-flex;align-items:center;gap:4px;margin-top:6px;">
+      📷 Add fit check photos
+      <input type="file" accept="image/*" multiple style="display:none"
+        onchange="addFitcheckToEntry('${entry.id}','${entry.outfitId || ''}', this.files)">
+    </label>`;
+
   return `<div class="history-entry">
     <div class="history-entry-header">
       <div class="history-entry-name">${escHtml(entry.outfitName)}</div>
       <button class="btn btn-sm btn-danger" onclick="deleteHistoryEntry('${entry.id}')">Remove</button>
     </div>
     <div class="history-entry-pieces">${pieceRows}</div>
+    ${photoStrip}
+    ${addPhotoBtn}
     ${noteSection}
   </div>`;
 }
@@ -3211,123 +4399,293 @@ async function confirmSwap() {
   showToast(`Swap complete. ${outfitsUpdated} saved outfit${outfitsUpdated !== 1 ? 's' : ''} updated.`, 'success');
   renderCloset();
   renderSavedOutfits();
+  renderWearHistory();
   updateHeaderStats();
   updateOutfitCountDisplay();
   swappingPieceId = null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// CUSTOM STYLE BUILDER
+// CUSTOM STYLE BUILDER — unified grid interface
 // ─────────────────────────────────────────────────────────────────────────
+
+const SB_ROWS = 5, SB_COLS = 3;
+
+// Slot color palette — cycles through these for visual differentiation
+const SB_COLORS = [
+  { bg: '#EEF5E8', border: '#7A8C6A', text: '#4A5E3A' },
+  { bg: '#E6F1FB', border: '#3A4A5C', text: '#2A3A4C' },
+  { bg: '#FFF8E7', border: '#B08030', text: '#7A5020' },
+  { bg: '#FAF0ED', border: '#A0614A', text: '#703020' },
+  { bg: '#EDE6D5', border: '#8A7A5A', text: '#5A4A2A' },
+];
+
+// Style builder state
 let editingStyleSlots      = [];
 let editingStyleId         = null;
 let styleGlobalExcludeTags = [];
 let editingConflictRules   = [];
+let sbActiveCell           = null; // {row,col} or null
+let sbEditingSlot          = null; // draft copy of slot being edited
+let sbDragSlotIndex        = null; // index in editingStyleSlots being dragged
 
+/** Open style builder modal for a new style. */
 function openAddStyle() {
-  editingStyleId = null;
-  editingStyleSlots = [
-    { type: 'top',    required: true,  requiredTags: [], excludedTags: [], count: 1 },
-    { type: 'bottom', required: true,  requiredTags: [], excludedTags: [], count: 1 },
-  ];
+  editingStyleId         = null;
+  editingStyleSlots      = [];
   styleGlobalExcludeTags = [];
   editingConflictRules   = [];
+  sbActiveCell           = null;
+  sbEditingSlot          = null;
   document.getElementById('modal-style-title').textContent = 'Add Custom Style';
-  document.getElementById('field-style-name').value = '';
-  document.getElementById('style-form-error').innerHTML = '';
-  renderSlotBuilder();
+  document.getElementById('field-style-name').value        = '';
+  document.getElementById('style-form-error').innerHTML    = '';
+  renderStyleGrid();
   renderStyleGlobalExcludePills();
   renderConflictRules();
   openModal('modal-style');
   setTimeout(() => document.getElementById('field-style-name').focus(), 100);
 }
 
-function addSlotRow() {
-  const knownTypes = getAllTypes();
-  editingStyleSlots.push({ type: knownTypes[0] || 'top', required: false, requiredTags: [], excludedTags: [], count: 1 });
-  renderSlotBuilder();
+/** Return the slot at (row, col) or null. */
+function sbSlotAt(row, col) {
+  return editingStyleSlots.find(s => s.row === row && s.col === col) || null;
 }
 
-function removeSlotRow(index) {
-  editingStyleSlots.splice(index, 1);
-  renderSlotBuilder();
+/** Render the full 5x3 grid inside the style builder modal. */
+function renderStyleGrid() {
+  const grid = document.getElementById('sb-grid');
+  if (!grid) return;
+  let html = '';
+  for (let r = 1; r <= SB_ROWS; r++) {
+    html += `<div class="sb-row-lbl">R${r}</div>`;
+    for (let c = 1; c <= SB_COLS; c++) {
+      const slot    = sbSlotAt(r, c);
+      const isActive = sbActiveCell && sbActiveCell.row === r && sbActiveCell.col === c;
+      const slotIdx  = editingStyleSlots.indexOf(slot);
+      if (slot) {
+        const col = SB_COLORS[slot.colorIdx % SB_COLORS.length];
+        const tagPills = slot.requiredTags.slice(0, 3).map(t =>
+          `<span class="sb-mini-tag" style="background:${col.border}22;color:${col.text};">${escHtml(t)}</span>`
+        ).join('');
+        html += `<div class="sb-cell-filled${isActive ? ' sb-active' : ''}"
+          style="background:${col.bg};border-color:${col.border};"
+          onclick="sbOpenCell(${r},${c})"
+          draggable="true"
+          ondragstart="sbDragStart(event,${slotIdx})"
+          ondragover="sbDragOver(event)"
+          ondragleave="sbDragLeave(event)"
+          ondrop="sbDrop(event,${r},${c})">
+          <span class="sb-drag-handle">\u22bf</span>
+          <div class="sb-cell-type" style="color:${col.text};">${escHtml(slot.type)}</div>
+          <span class="sb-cell-badge">${slot.required ? 'required' : 'optional'}</span>
+          ${tagPills ? `<div class="sb-cell-tags">${tagPills}</div>` : ''}
+        </div>`;
+      } else {
+        html += `<div class="sb-cell-empty${isActive ? ' sb-active' : ''}"
+          onclick="sbOpenCell(${r},${c})"
+          ondragover="sbDragOver(event)"
+          ondragleave="sbDragLeave(event)"
+          ondrop="sbDrop(event,${r},${c})">
+          <div class="sb-plus">+</div>
+          <div class="sb-add-lbl">Add slot</div>
+        </div>`;
+      }
+    }
+  }
+  grid.innerHTML = html;
 }
 
-function renderSlotBuilder() {
-  const container  = document.getElementById('slot-builder');
-  const knownTypes = getAllTypes();
-  container.innerHTML = editingStyleSlots.map((slot, i) => {
-    const typeOptions = knownTypes.map(t =>
-      `<option value="${t}" ${slot.type === t ? 'selected' : ''}>${t.charAt(0).toUpperCase()+t.slice(1)}</option>`
-    ).join('');
-    const reqPills = slot.requiredTags.map(t =>
-      `<span class="tag-pill" style="font-size:0.7rem;">${escHtml(t)}<button class="tag-pill-remove" type="button" onclick="removeSlotTag(${i},'required','${escHtml(t)}')">×</button></span>`
-    ).join('');
-    const exclPills = slot.excludedTags.map(t =>
-      `<span class="tag-pill" style="font-size:0.7rem;background:var(--terracotta-bg);border-color:var(--terracotta);color:var(--terracotta);">${escHtml(t)}<button class="tag-pill-remove" type="button" onclick="removeSlotTag(${i},'excluded','${escHtml(t)}')">×</button></span>`
-    ).join('');
-    return `<div class="slot-row">
-      <div><div class="slot-row-label">Type</div>
-        <select class="form-control" style="font-size:0.82rem;" onchange="updateSlotType(${i}, this.value)">${typeOptions}</select>
+/** Open or toggle the inline popover for a cell. */
+function sbOpenCell(row, col) {
+  if (sbActiveCell && sbActiveCell.row === row && sbActiveCell.col === col) {
+    sbClosePopover(); return;
+  }
+  sbActiveCell = { row, col };
+  const existing = sbSlotAt(row, col);
+  sbEditingSlot = existing
+    ? { ...existing, requiredTags: [...existing.requiredTags], excludedTags: [...existing.excludedTags] }
+    : { type: getAllTypes()[0] || 'top', required: true, requiredTags: [], excludedTags: [], count: 1, row, col, colorIdx: editingStyleSlots.length % SB_COLORS.length };
+  renderStyleGrid();
+  renderSlotPopover();
+  setTimeout(() => {
+    const pop = document.getElementById('sb-popover');
+    if (pop) pop.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }, 50);
+}
+
+/** Close the popover without saving. */
+function sbClosePopover() {
+  sbActiveCell  = null;
+  sbEditingSlot = null;
+  renderStyleGrid();
+  const pop = document.getElementById('sb-popover');
+  if (pop) pop.style.display = 'none';
+}
+
+/** Render the inline slot detail popover. */
+function renderSlotPopover() {
+  const pop = document.getElementById('sb-popover');
+  if (!sbActiveCell || !sbEditingSlot || !pop) { if (pop) pop.style.display = 'none'; return; }
+  pop.style.display = 'block';
+  const { row, col } = sbActiveCell;
+  const s     = sbEditingSlot;
+  const isNew = !sbSlotAt(row, col);
+
+  const typeOptions = getAllTypes().map(t =>
+    `<option value="${t}" ${s.type === t ? 'selected' : ''}>${t.charAt(0).toUpperCase() + t.slice(1)}</option>`
+  ).join('');
+
+  const reqPills = s.requiredTags.map(t =>
+    `<span class="tag-pill" style="font-size:0.75rem;">${escHtml(t)}<button class="tag-pill-remove" type="button" onmousedown="sbRemoveTag('required','${escHtml(t)}')">×</button></span>`
+  ).join('');
+  const exclPills = s.excludedTags.map(t =>
+    `<span class="tag-pill" style="font-size:0.75rem;background:var(--terracotta-bg);border-color:var(--terracotta);color:var(--terracotta);">${escHtml(t)}<button class="tag-pill-remove" type="button" onmousedown="sbRemoveTag('excluded','${escHtml(t)}')">×</button></span>`
+  ).join('');
+
+  pop.innerHTML = `
+    <div class="sb-popover-header">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <div class="sb-popover-title">${isNew ? 'Add slot' : 'Edit slot'}</div>
+        <span class="sb-cell-pos-badge">r${row}c${col}</span>
       </div>
-      <div><div class="slot-row-label">Required?</div>
-        <label class="slot-required-toggle">
-          <input type="checkbox" ${slot.required ? 'checked' : ''} onchange="updateSlotRequired(${i}, this.checked)">
-          <span>${slot.required ? 'Required' : 'Optional'}</span>
-        </label>
+      <button class="btn btn-sm btn-icon" onclick="sbClosePopover()">✕</button>
+    </div>
+    <div class="form-row" style="margin-bottom:10px;">
+      <div class="form-group" style="margin-bottom:0;">
+        <label class="form-label">Piece type</label>
+        <select class="form-control" onchange="sbEditingSlot.type=this.value;">${typeOptions}</select>
       </div>
-      <div style="grid-column:1/-2;margin-top:6px;">
-        <div class="slot-row-label" style="color:var(--sage-dark);">Must have tags</div>
-        <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">${reqPills}
-          <button type="button" class="btn btn-sm" style="font-size:0.72rem;padding:3px 8px;"
-            onclick="showTagPicker(this, editingStyleSlots[${i}].requiredTags, t => { addSlotTagFromPicker(${i},'required',t); })">+ Tag</button>
+      <div class="form-group" style="margin-bottom:0;">
+        <label class="form-label">Required?</label>
+        <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;margin-top:2px;">
+          <button type="button" class="btn btn-sm" style="flex:1;border:none;border-radius:0;${s.required ? 'background:var(--sage-dark);color:var(--white);' : ''}" onclick="sbEditingSlot.required=true;renderSlotPopover();">Required</button>
+          <button type="button" class="btn btn-sm" style="flex:1;border:none;border-radius:0;${!s.required ? 'background:var(--sage-dark);color:var(--white);' : ''}" onclick="sbEditingSlot.required=false;renderSlotPopover();">Optional</button>
         </div>
       </div>
-      <div style="grid-column:1/-2;margin-top:4px;">
-        <div class="slot-row-label" style="color:var(--terracotta);">Exclude tags</div>
-        <div style="display:flex;flex-wrap:wrap;gap:4px;align-items:center;">${exclPills}
-          <button type="button" class="btn btn-sm" style="font-size:0.72rem;padding:3px 8px;background:var(--terracotta-bg);border-color:var(--terracotta);color:var(--terracotta);"
-            onclick="showTagPicker(this, editingStyleSlots[${i}].excludedTags, t => { addSlotTagFromPicker(${i},'excluded',t); })">+ Tag</button>
-        </div>
+    </div>
+    <div class="form-group" style="margin-bottom:10px;">
+      <label class="form-label">Must have tags</label>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;">
+        ${reqPills}
+        <button type="button" class="btn btn-sm" style="font-size:0.72rem;padding:3px 8px;"
+          onclick="showTagPicker(this, sbEditingSlot.requiredTags, t => sbAddTag('required',t))">+ Tag</button>
       </div>
-      <div style="align-self:start;padding-top:20px;">
-        <button type="button" class="btn btn-sm btn-danger btn-icon" onclick="removeSlotRow(${i})">✕</button>
+    </div>
+    <div class="form-group" style="margin-bottom:10px;">
+      <label class="form-label">Exclude tags</label>
+      <div style="display:flex;flex-wrap:wrap;gap:5px;align-items:center;">
+        ${exclPills}
+        <button type="button" class="btn btn-sm" style="font-size:0.72rem;padding:3px 8px;background:var(--terracotta-bg);border-color:var(--terracotta);color:var(--terracotta);"
+          onclick="showTagPicker(this, sbEditingSlot.excludedTags, t => sbAddTag('excluded',t))">+ Tag</button>
       </div>
+    </div>
+    <div class="sb-popover-footer">
+      <div style="display:flex;gap:6px;">
+        ${!isNew ? `<button class="btn btn-danger btn-sm" onclick="sbDeleteSlot()">Delete slot</button>` : ''}
+        ${!isNew ? `<button class="btn btn-sm" onclick="sbDuplicateSlot()">Duplicate</button>` : ''}
+      </div>
+      <button class="btn btn-primary btn-sm" onclick="sbSaveSlot()">${isNew ? 'Add slot' : 'Save changes'}</button>
     </div>`;
-  }).join('');
 }
 
-async function addSlotTagFromPicker(slotIndex, tagType, tag) {
+/** Add a tag to the draft slot via picker. */
+async function sbAddTag(tagType, tag) {
   const clean = tag.trim().toLowerCase().replace(/\s+/g, '-');
   if (!clean) return;
-  const arr = tagType === 'required' ? editingStyleSlots[slotIndex].requiredTags : editingStyleSlots[slotIndex].excludedTags;
-  if (!arr.includes(clean)) arr.push(clean);
-  await registerTags([clean]);
-  renderSlotBuilder();
+  const arr = tagType === 'required' ? sbEditingSlot.requiredTags : sbEditingSlot.excludedTags;
+  if (!arr.includes(clean)) { arr.push(clean); await registerTags([clean]); }
+  renderSlotPopover();
 }
 
-function updateSlotType(index, type) { editingStyleSlots[index].type = type; }
-function updateSlotRequired(index, required) { editingStyleSlots[index].required = required; renderSlotBuilder(); }
-
-async function onSlotTagKeydown(e, slotIndex, tagType) {
-  if (e.key === 'Enter' || e.key === ',') {
-    e.preventDefault();
-    const val = e.target.value.trim().toLowerCase().replace(/\s+/g, '-');
-    if (!val) return;
-    const arr = tagType === 'required' ? editingStyleSlots[slotIndex].requiredTags : editingStyleSlots[slotIndex].excludedTags;
-    if (!arr.includes(val)) { arr.push(val); await registerTags([val]); }
-    e.target.value = '';
-    renderSlotBuilder();
-  }
-}
-
-function removeSlotTag(slotIndex, tagType, tag) {
-  const arr = tagType === 'required' ? editingStyleSlots[slotIndex].requiredTags : editingStyleSlots[slotIndex].excludedTags;
+/** Remove a tag from the draft slot. */
+function sbRemoveTag(tagType, tag) {
+  const arr = tagType === 'required' ? sbEditingSlot.requiredTags : sbEditingSlot.excludedTags;
   const idx = arr.indexOf(tag);
   if (idx > -1) arr.splice(idx, 1);
-  renderSlotBuilder();
+  renderSlotPopover();
 }
 
+/** Save draft slot into editingStyleSlots. */
+function sbSaveSlot() {
+  if (!sbEditingSlot || !sbActiveCell) return;
+  const { row, col } = sbActiveCell;
+  const existingIdx  = editingStyleSlots.findIndex(s => s.row === row && s.col === col);
+  sbEditingSlot.row = row;
+  sbEditingSlot.col = col;
+  if (existingIdx > -1) {
+    editingStyleSlots[existingIdx] = { ...sbEditingSlot };
+  } else {
+    sbEditingSlot.colorIdx = editingStyleSlots.length % SB_COLORS.length;
+    editingStyleSlots.push({ ...sbEditingSlot });
+  }
+  sbClosePopover();
+  renderConflictRules();
+}
+
+/** Delete the slot at the active cell. */
+function sbDeleteSlot() {
+  if (!sbActiveCell) return;
+  const { row, col } = sbActiveCell;
+  editingStyleSlots = editingStyleSlots.filter(s => !(s.row === row && s.col === col));
+  sbClosePopover();
+  renderConflictRules();
+}
+
+/** Duplicate the active slot into the first empty cell. */
+function sbDuplicateSlot() {
+  if (!sbEditingSlot) return;
+  let target = null;
+  outer: for (let r = 1; r <= SB_ROWS; r++) {
+    for (let c = 1; c <= SB_COLS; c++) {
+      if (!sbSlotAt(r, c) && !(sbActiveCell && sbActiveCell.row === r && sbActiveCell.col === c)) {
+        target = { row: r, col: c }; break outer;
+      }
+    }
+  }
+  if (!target) { showToast('No empty cells to duplicate into.', 'warning'); return; }
+  const copy = { ...sbEditingSlot, row: target.row, col: target.col,
+    colorIdx: editingStyleSlots.length % SB_COLORS.length,
+    requiredTags: [...sbEditingSlot.requiredTags],
+    excludedTags: [...sbEditingSlot.excludedTags] };
+  editingStyleSlots.push(copy);
+  sbActiveCell  = target;
+  sbEditingSlot = { ...copy };
+  renderStyleGrid();
+  renderSlotPopover();
+  renderConflictRules();
+}
+
+// ── Drag and drop ──────────────────────────────────────────────────────────
+function sbDragStart(e, slotIdx) {
+  sbDragSlotIndex = slotIdx;
+  e.dataTransfer.effectAllowed = 'move';
+}
+function sbDragOver(e) {
+  e.preventDefault();
+  e.currentTarget.classList.add('sb-cell-drag-over');
+  e.dataTransfer.dropEffect = 'move';
+}
+function sbDragLeave(e) { e.currentTarget.classList.remove('sb-cell-drag-over'); }
+function sbDrop(e, targetRow, targetCol) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('sb-cell-drag-over');
+  if (sbDragSlotIndex === null) return;
+  const dragged = editingStyleSlots[sbDragSlotIndex];
+  if (!dragged) { sbDragSlotIndex = null; return; }
+  const targetSlot = sbSlotAt(targetRow, targetCol);
+  if (targetSlot) {
+    const oldRow = dragged.row, oldCol = dragged.col;
+    dragged.row = targetRow; dragged.col = targetCol;
+    targetSlot.row = oldRow; targetSlot.col = oldCol;
+  } else {
+    dragged.row = targetRow; dragged.col = targetCol;
+  }
+  sbDragSlotIndex = null;
+  sbClosePopover();
+}
+
+// ── Global excludes ──────────────────────────────────────────────────────
 function renderStyleGlobalExcludePills() {
   const wrap = document.getElementById('style-global-exclude-wrap');
   if (!wrap) return;
@@ -3335,65 +4693,62 @@ function renderStyleGlobalExcludePills() {
     `<span class="tag-pill" style="background:var(--terracotta-bg);border-color:var(--terracotta);color:var(--terracotta);">
       ${escHtml(tag)}<button class="tag-pill-remove" type="button" onclick="removeStyleGlobalTag('${escHtml(tag)}')">×</button>
     </span>`
-  ).join('') || '<span style="font-size:0.78rem;color:var(--ink-light);font-family:var(--font-body);">None — all types eligible</span>';
+  ).join('') || '<span style="font-size:0.75rem;color:var(--ink-light);font-family:var(--font-body);">None</span>';
 }
-
 function addStyleGlobalTag(tag) {
   const clean = tag.trim().toLowerCase().replace(/\s+/g, '-');
   if (!clean || styleGlobalExcludeTags.includes(clean)) return;
   styleGlobalExcludeTags.push(clean);
   renderStyleGlobalExcludePills();
 }
-
 function removeStyleGlobalTag(tag) {
   styleGlobalExcludeTags = styleGlobalExcludeTags.filter(t => t !== tag);
   renderStyleGlobalExcludePills();
 }
 
-// ── Conflict rules ───────────────────────────────────────────────────────
+// ── Conflict rules ─────────────────────────────────────────────────────────
 function addConflictRule() {
   if (editingStyleSlots.length < 2) { showToast('Add at least 2 slots before creating a conflict rule.', 'warning'); return; }
   editingConflictRules.push({ ifSlotIndex: 0, ifTag: '', thenSlotIndex: 1, thenExcludeTag: '' });
   renderConflictRules();
 }
-
 function removeConflictRule(index) {
   editingConflictRules.splice(index, 1);
   renderConflictRules();
 }
-
 function renderConflictRules() {
   const container = document.getElementById('conflict-rules-container');
   if (!container) return;
   if (editingConflictRules.length === 0) {
-    container.innerHTML = '<div style="font-size:0.78rem;color:var(--ink-light);font-family:var(--font-body);padding:4px 0;">No conflict rules. Add one to prevent tag combinations across slots.</div>';
+    container.innerHTML = '<div style="font-size:0.75rem;color:var(--ink-light);font-family:var(--font-body);">No conflict rules yet.</div>';
     return;
   }
-  const slotLabels = editingStyleSlots.map((s, i) => `Slot ${i+1} (${s.type})`);
+  const slotLabels = editingStyleSlots.map((s, i) =>
+    `Slot ${i+1} (${s.type}${s.row && s.col ? ` r${s.row}c${s.col}` : ''})`
+  );
   container.innerHTML = `<div class="conflict-rule-list">
     ${editingConflictRules.map((rule, i) => {
       const ifTagBtn = rule.ifTag
         ? `<span class="tag-pill" style="font-size:0.75rem;cursor:pointer;" onclick="pickConflictTag(${i},'ifTag',this)">${escHtml(rule.ifTag)} ✎</span>`
-        : `<button type="button" class="btn btn-sm" style="font-size:0.72rem;padding:2px 8px;" onclick="pickConflictTag(${i},'ifTag',this)">Pick tag…</button>`;
+        : `<button type="button" class="btn btn-sm" style="font-size:0.72rem;padding:2px 8px;" onclick="pickConflictTag(${i},'ifTag',this)">Pick tag...</button>`;
       const thenTagBtn = rule.thenExcludeTag
         ? `<span class="tag-pill" style="font-size:0.75rem;cursor:pointer;background:var(--terracotta-bg);border-color:var(--terracotta);color:var(--terracotta);" onclick="pickConflictTag(${i},'thenExcludeTag',this)">${escHtml(rule.thenExcludeTag)} ✎</span>`
-        : `<button type="button" class="btn btn-sm" style="font-size:0.72rem;padding:2px 8px;" onclick="pickConflictTag(${i},'thenExcludeTag',this)">Pick tag…</button>`;
+        : `<button type="button" class="btn btn-sm" style="font-size:0.72rem;padding:2px 8px;" onclick="pickConflictTag(${i},'thenExcludeTag',this)">Pick tag...</button>`;
       return `<div class="conflict-rule-row">
         <span style="flex:1;display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:0.8rem;">
-          If <select onchange="editingConflictRules[${i}].ifSlotIndex=+this.value;renderConflictRules()" style="font-size:0.8rem;padding:2px 4px;border:1px solid var(--border);border-radius:4px;">
+          If <select onchange="editingConflictRules[${i}].ifSlotIndex=+this.value;renderConflictRules()" style="font-size:0.78rem;padding:2px 4px;border:1px solid var(--border);border-radius:4px;">
             ${slotLabels.map((l,idx) => `<option value="${idx}" ${rule.ifSlotIndex===idx?'selected':''}>${l}</option>`).join('')}
           </select>
-          picks ${ifTagBtn} → exclude ${thenTagBtn}
-          from <select onchange="editingConflictRules[${i}].thenSlotIndex=+this.value;renderConflictRules()" style="font-size:0.8rem;padding:2px 4px;border:1px solid var(--border);border-radius:4px;">
+          picks ${ifTagBtn} - exclude ${thenTagBtn}
+          from <select onchange="editingConflictRules[${i}].thenSlotIndex=+this.value;renderConflictRules()" style="font-size:0.78rem;padding:2px 4px;border:1px solid var(--border);border-radius:4px;">
             ${slotLabels.map((l,idx) => `<option value="${idx}" ${rule.thenSlotIndex===idx?'selected':''}>${l}</option>`).join('')}
           </select>
         </span>
-        <button class="btn btn-sm btn-danger btn-icon" onclick="removeConflictRule(${i})">✕</button>
+        <button class="btn btn-sm btn-danger btn-icon" onclick="removeConflictRule(${i})">&#x2715;</button>
       </div>`;
     }).join('')}
   </div>`;
 }
-
 function pickConflictTag(ruleIndex, field, anchorEl) {
   showTagPicker(anchorEl, [], tag => {
     editingConflictRules[ruleIndex][field] = tag.trim().toLowerCase().replace(/\s+/g, '-');
@@ -3401,23 +4756,21 @@ function pickConflictTag(ruleIndex, field, anchorEl) {
   });
 }
 
+// ── Save style ─────────────────────────────────────────────────────────────
 async function saveCustomStyle() {
   const name  = document.getElementById('field-style-name').value.trim();
   const errEl = document.getElementById('style-form-error');
   if (!name) { errEl.innerHTML = '<div class="alert alert-error">Style name is required.</div>'; return; }
-  if (editingStyleSlots.length === 0) { errEl.innerHTML = '<div class="alert alert-error">Add at least one slot.</div>'; return; }
-  if (!editingStyleSlots.some(s => s.required)) { errEl.innerHTML = '<div class="alert alert-error">At least one slot must be required.</div>'; return; }
+  if (editingStyleSlots.length === 0) { errEl.innerHTML = '<div class="alert alert-error">Add at least one slot by clicking a grid cell.</div>'; return; }
+  if (!editingStyleSlots.some(s => s.required)) { errEl.innerHTML = '<div class="alert alert-error">At least one slot must be marked as required.</div>'; return; }
   const badRule = editingConflictRules.find(r => !r.ifTag || !r.thenExcludeTag);
   if (badRule) { errEl.innerHTML = '<div class="alert alert-error">All conflict rules must have both tags filled in.</div>'; return; }
-
   const style = {
-    id:                editingStyleId || uid(),
-    name, isDefault:   false,
-    slots:             editingStyleSlots.map(s => ({ ...s, requiredTags: [...s.requiredTags], excludedTags: [...s.excludedTags] })),
+    id: editingStyleId || uid(), name, isDefault: false,
+    slots: editingStyleSlots.map(s => ({ ...s, requiredTags: [...s.requiredTags], excludedTags: [...s.excludedTags] })),
     globalExcludeTags: [...styleGlobalExcludeTags],
     conflictRules:     editingConflictRules.map(r => ({ ...r })),
   };
-
   await DataStore.save('styles', style);
   closeModal('modal-style');
   showToast(`Style "${name}" saved!`, 'success');
@@ -3575,22 +4928,62 @@ async function removeTagFromRegistry(tag) {
   showToast(`Tag "${tag}" removed.`, 'success');
 }
 
-async function openRenameTag(oldTag) {
-  const newTag = window.prompt(`Rename tag "${oldTag}" to:`, oldTag);
-  if (!newTag || newTag.trim() === oldTag) return;
-  const clean = newTag.trim().toLowerCase().replace(/\s+/g, '-');
-  if (!clean) { showToast('Tag name cannot be empty.', 'error'); return; }
-  if (state.tagRegistry.includes(clean) && clean !== oldTag) { showToast(`Tag "${clean}" already exists.`, 'error'); return; }
+// Session variable for the tag being renamed
+let _renamingTag = null;
+
+/**
+ * Open the rename tag modal.
+ * @param {string} oldTag
+ */
+function openRenameTag(oldTag) {
+  _renamingTag = oldTag;
+  document.getElementById('field-rename-tag-value').value = oldTag;
+  document.getElementById('rename-tag-error').innerHTML = '';
+  openModal('modal-rename-tag');
+  setTimeout(() => {
+    const input = document.getElementById('field-rename-tag-value');
+    input.focus();
+    input.select();
+  }, 100);
+}
+
+/**
+ * Confirm the rename from the modal.
+ */
+async function confirmRenameTag() {
+  const oldTag = _renamingTag;
+  if (!oldTag) return;
+  const newVal = document.getElementById('field-rename-tag-value').value.trim();
+  const clean  = newVal.toLowerCase().replace(/\s+/g, '-');
+  const errEl  = document.getElementById('rename-tag-error');
+
+  if (!clean) {
+    errEl.innerHTML = '<div class="alert alert-error" style="margin:0;">Tag name cannot be empty.</div>';
+    return;
+  }
+  if (state.tagRegistry.includes(clean) && clean !== oldTag) {
+    errEl.innerHTML = `<div class="alert alert-error" style="margin:0;">Tag "${clean}" already exists.</div>`;
+    return;
+  }
+
+  _renamingTag = null;
+  closeModal('modal-rename-tag');
+
+  // Update all pieces
   for (const p of state.pieces) {
     const idx = p.tags.indexOf(oldTag);
     if (idx > -1) { p.tags[idx] = clean; await DataStore.save('pieces', p); }
   }
+
+  // Update registry
   const regIdx = state.tagRegistry.indexOf(oldTag);
   if (regIdx > -1) state.tagRegistry[regIdx] = clean;
   state.tagRegistry.sort();
   await DataStore.setCollection('tagRegistry', state.tagRegistry);
+
   renderTagManager();
   renderCloset();
+  updateOutfitCountDisplay();
   showToast(`Renamed "${oldTag}" → "${clean}" across all pieces.`, 'success');
 }
 
@@ -3624,6 +5017,7 @@ async function handleCsvUpload(e) {
         added++;
       }
       renderCloset();
+      renderSavedOutfits();
       updateHeaderStats();
       updateOutfitCountDisplay();
       showToast(`Imported ${added} piece${added !== 1 ? 's' : ''} successfully.`, 'success');
@@ -3700,6 +5094,7 @@ async function handleJsonUpload(e) {
       const data = JSON.parse(ev.target.result);
       await DataStore.import(data);
       renderCloset();
+      renderSavedOutfits();
       updateHeaderStats();
       updateOutfitCountDisplay();
       errEl.innerHTML = '';
@@ -3713,15 +5108,65 @@ async function handleJsonUpload(e) {
 }
 
 async function exportZip() {
-  const data       = await DataStore.export();
-  const csvHeader  = 'name,type,quantity,tags,wearCount,favoriteCount,archived,dateAdded\n';
-  const csvRows    = data.pieces.map(p =>
+  const data      = await DataStore.export();
+  const dateStamp = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+
+  // Build CSV for pieces
+  const csvHeader = 'name,type,quantity,tags,wearCount,favoriteCount,archived,dateAdded\n';
+  const csvRows   = data.pieces.map(p =>
     [csvEsc(p.name), p.type, p.quantity, csvEsc(p.tags.join(';')),
      p.wearCount||0, p.favoriteCount||0, p.archived?'true':'false', p.dateAdded||''].join(',')
   ).join('\n');
-  downloadText('closet.csv',  csvHeader + csvRows, 'text/csv');
-  setTimeout(() => downloadText('backup.json', JSON.stringify(data, null, 2), 'application/json'), 300);
-  showToast('Downloading closet.csv and backup.json…', 'success');
+
+  // Count how many photos are stored in IndexedDB (not included in ZIP)
+  let photoCount = 0;
+  try { photoCount = (await PhotoStore.allIds()).length; } catch(_) {}
+
+  // Build a README so the user knows what they're looking at
+  const readme = [
+    'Wardrobe App — Data Export',
+    `Exported: ${dateStamp}`,
+    '',
+    'Files in this ZIP:',
+    '  closet.csv   — All pieces (name, type, quantity, tags, wear counts)',
+    '  backup.json  — Complete wardrobe data (pieces, outfits, styles, wear history)',
+    '',
+    'Photos:',
+    `  ${photoCount} photo${photoCount !== 1 ? 's are' : ' is'} stored locally in your browser (IndexedDB).`,
+    '  Photos are NOT included in this ZIP — they are device-specific.',
+    '  To back up photos, use your device\'s screenshot or Files app.',
+    '',
+    'To restore: use "Import from JSON" and upload backup.json.',
+    'The CSV can be used to re-import pieces into a fresh install.',
+  ].join('\n');
+
+  try {
+    const zip = new JSZip();
+    zip.file('closet.csv',  csvHeader + csvRows);
+    zip.file('backup.json', JSON.stringify(data, null, 2));
+    zip.file('README.txt',  readme);
+
+    const blob = await zip.generateAsync({
+      type:               'blob',
+      compression:        'DEFLATE',
+      compressionOptions: { level: 6 }
+    });
+
+    const url = URL.createObjectURL(blob);
+    const a   = document.createElement('a');
+    a.href     = url;
+    a.download = `wardrobe-backup-${dateStamp}.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    showToast(`ZIP downloaded — ${data.pieces.length} pieces, ${data.outfits.filter(o=>o.saved).length} outfits.`, 'success');
+  } catch(e) {
+    console.error('[exportZip] JSZip failed:', e);
+    // Graceful fallback: download the two files separately if JSZip errors
+    downloadText('closet.csv',  csvHeader + csvRows, 'text/csv');
+    setTimeout(() => downloadText('backup.json', JSON.stringify(data, null, 2), 'application/json'), 300);
+    showToast('ZIP failed — downloading files separately instead.', 'warning');
+  }
 }
 
 function downloadText(filename, content, mime) {
@@ -3817,6 +5262,59 @@ function escHtml(str) {
 async function init() {
   // Load all data from the active storage backend into the in-memory state cache
   await DataStore.load();
+
+  // ── Retroactive migration: add row/col to slots on old user styles ──────
+  // Slots saved before the grid builder existed have no row/col.
+  // Assign them a default single-column layout (all in col 2) so they
+  // still work in the preview grid rather than rendering nothing.
+  let slotMigrated = 0;
+  for (const style of state.styles) {
+    if (!style.slots) continue;
+    style.slots.forEach((slot, i) => {
+      if (!slot.row || !slot.col) {
+        slot.row = i + 1;
+        slot.col = 2; // centre column default
+        slotMigrated++;
+      }
+    });
+    if (slotMigrated > 0) await DataStore.save('styles', style);
+  }
+  if (slotMigrated > 0) {
+    console.log(`[init] Added grid positions to ${slotMigrated} slot(s) in user styles.`);
+  }
+
+  // ── Retroactive migration: ensure all wear entries have photoIds field ──
+  // Entries created before photoIds was added would be missing the field,
+  // causing silent errors when trying to spread it.
+  let photoMigrated = 0;
+  for (const entry of state.wearHistory) {
+    if (!Array.isArray(entry.photoIds)) {
+      entry.photoIds = [];
+      await DataStore.save('wearHistory', entry);
+      photoMigrated++;
+    }
+  }
+  if (photoMigrated > 0) {
+    console.log(`[init] Added photoIds field to ${photoMigrated} wear history entry/entries.`);
+  }
+
+  // ── Retroactive migration: link orphaned wear entries to saved outfits ──
+  // Runs once silently on every load. Fixes wear entries created before the
+  // auto-link logic existed (e.g. "Wore This" from generator before a save).
+  // No-op for entries that are already linked or have no matching outfit.
+  let migrated = 0;
+  for (const entry of state.wearHistory) {
+    if (entry.outfitId) continue; // already linked — skip
+    const match = findMatchingSavedOutfit(entry.pieceIds || []);
+    if (!match) continue;
+    entry.outfitId   = match.id;
+    entry.outfitName = match.name; // use the saved outfit's name going forward
+    await DataStore.save('wearHistory', entry);
+    migrated++;
+  }
+  if (migrated > 0) {
+    console.log(`[init] Linked ${migrated} wear history entry/entries to saved outfits.`);
+  }
 
   // Initial UI renders — all synchronous (read from in-memory state)
   renderCloset();
